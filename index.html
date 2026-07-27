@@ -159,6 +159,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
   cursor:pointer;
 }
 .sidebar.collapsed .role-pill .role-text{display:none;}
+.sidebar.collapsed .reset-link-wrap{display:none;}
 .sidebar.collapsed .role-pill{justify-content:center;}
 
 .main-col{flex:1; display:flex; flex-direction:column; min-width:0;}
@@ -477,6 +478,8 @@ table.data-table{width:100%; border-collapse:collapse; font-size:13px;}
 .label-text .lt-id{font-family:'Cascadia Code', Consolas, monospace; font-weight:800; font-size:11px;}
 .label-text .lt-name{font-size:9px; color:#444; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 </style>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -524,6 +527,7 @@ const ICONS = {
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v.01M12 11v5"/></svg>',
   clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5A1.5 1.5 0 0110.5 3h3A1.5 1.5 0 0115 4.5V7m2 0v13a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 017 20V7"/><path d="M10 11v6M14 11v6"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
 };
 function icon(name){ return ICONS[name] || ''; }
 function deviceTypeIcon(type){
@@ -667,8 +671,19 @@ function parseRecommended(raw){
   });
 }
 
-const TYPES = [...new Set(DEVICES.map(d=>d.type))];
-const STATUS_LIST = ["Bestellt","Geliefert","Im Lager","Im Einsatz","Ersatzgerät","Reparatur","Defekt","Verloren","Ausgemustert","Entsorgt"];
+/* ---- Verwaltbare Kategorien (Gerätetypen, Status-Werte usw.) ----
+   Diese Listen sind bewusst veränderbar (nicht "const"), damit sie unter
+   „Einstellungen" selbst gepflegt werden können — neue Werte hinzufügen oder
+   nicht mehr benötigte entfernen, ohne dass am Code etwas geändert werden muss. */
+let CATEGORY_LISTS = {
+  deviceTypes: ["Laptop","Desktop-PC","Smartphone","Tablet","Monitor","Dockingstation","Headset","Drucker","Netzwerkgerät","Zubehör","Sonstiges"],
+  deviceStatus: ["Bestellt","Geliefert","Im Lager","Im Einsatz","Ersatzgerät","Reparatur","Defekt","Verloren","Ausgemustert","Entsorgt"],
+  userStatus: ["Aktiv","Beurlaubt","Elternzeit","Ausgeschieden","Siehe Kommentar"],
+  licenseStatus: ["Aktiv","Läuft aus","Gekündigt"],
+};
+// sicherstellen, dass alle Typen/Status, die in den Importdaten vorkommen, auch in den Listen enthalten sind
+[...new Set(DEVICES.map(d=>d.type))].forEach(t=>{ if(!CATEGORY_LISTS.deviceTypes.includes(t)) CATEGORY_LISTS.deviceTypes.push(t); });
+[...new Set(DEVICES.map(d=>d.status))].forEach(s=>{ if(!CATEGORY_LISTS.deviceStatus.includes(s)) CATEGORY_LISTS.deviceStatus.push(s); });
 const SUPPLIERS = ["Bechtle","Cancom","Computacenter","Apple Business","Amazon Business","Conrad Business","Microsoft"];
 
 /* ---- Postpone-Zeiträume für die Austausch-Ampel ---- */
@@ -685,6 +700,130 @@ const POSTPONE_OPTIONS = [
 const ROLE_PASSWORDS = {};
 
 /* =========================================================
+   SPEICHERUNG — Änderungen im Browser dauerhaft merken
+   ========================================================= */
+/* Bisher liefen alle Änderungen (Geräte, Mitarbeitende, Lizenzen, Richtlinien)
+   nur im Arbeitsspeicher der aktuellen Seite — beim Neuladen war alles wieder
+   auf dem ursprünglichen Importstand. Jetzt wird der aktuelle Datenstand nach
+   jeder Änderung im localStorage DIESES Browsers gespeichert und beim nächsten
+   Öffnen automatisch wieder geladen.
+   Wichtige Einschränkung: localStorage ist pro Browser/Gerät getrennt — Änderungen
+   auf dem iPad erscheinen NICHT automatisch auf einem anderen Rechner/Handy. Für
+   einen wirklich geteilten, geräteübergreifenden Datenstand bräuchte es eine
+   echte Datenbank im Hintergrund. */
+const STORAGE_KEY = 'tepm-it-portal-data-v1';
+const SEED_USERS = JSON.parse(JSON.stringify(USERS));
+const SEED_DEVICES = JSON.parse(JSON.stringify(DEVICES));
+const SEED_LICENSES = JSON.parse(JSON.stringify(LICENSES));
+const SEED_PROCUREMENT = JSON.parse(JSON.stringify(PROCUREMENT));
+const SEED_CATEGORY_LISTS = JSON.parse(JSON.stringify(CATEGORY_LISTS));
+let storageAvailable = true;
+
+/* ---- Geteilter Cloud-Speicher (optional, Firebase Firestore) ----
+   Solange CLOUD_CONFIG.apiKey auf dem Platzhalter steht, läuft alles wie
+   bisher nur lokal (localStorage, pro Browser/Gerät getrennt). Sobald hier
+   ein echtes Firebase-Projekt eingetragen ist, synchronisiert sich der
+   Datenstand automatisch zwischen allen Geräten, die diese Seite öffnen. */
+const CLOUD_CONFIG = {
+  apiKey: "DEIN-API-KEY",
+  authDomain: "DEIN-PROJEKT.firebaseapp.com",
+  projectId: "DEIN-PROJEKT",
+  storageBucket: "DEIN-PROJEKT.appspot.com",
+  messagingSenderId: "000000000000",
+  appId: "1:000000000000:web:xxxxxxxxxxxxxxxxxxxxxx",
+};
+const CLOUD_DOC_PATH = {collection:'tepm-it-portal', doc:'shared-data'};
+let cloudEnabled = false;
+let cloudDocRef = null;
+let cloudPushTimer = null;
+let lastAppliedSnapshot = null;
+
+function cloudConfigured(){
+  return CLOUD_CONFIG.apiKey && CLOUD_CONFIG.apiKey.indexOf('DEIN-') !== 0;
+}
+function initCloud(){
+  if(!cloudConfigured()) return;
+  if(typeof firebase === 'undefined'){ console.warn('Firebase-SDK konnte nicht geladen werden.'); return; }
+  try{
+    firebase.initializeApp(CLOUD_CONFIG);
+    const db = firebase.firestore();
+    cloudDocRef = db.collection(CLOUD_DOC_PATH.collection).doc(CLOUD_DOC_PATH.doc);
+    cloudEnabled = true;
+    cloudDocRef.onSnapshot(function(snap){
+      if(!snap.exists) return;
+      const data = snap.data();
+      const incoming = JSON.stringify(data);
+      if(incoming === lastAppliedSnapshot) return; // eigene Änderung, kein erneutes Anwenden nötig
+      lastAppliedSnapshot = incoming;
+      if(Array.isArray(data.users)) USERS = data.users;
+      if(Array.isArray(data.devices)) DEVICES = data.devices;
+      if(Array.isArray(data.licenses)) LICENSES = data.licenses;
+      if(Array.isArray(data.procurement)) PROCUREMENT = data.procurement;
+      if(data.categoryLists) CATEGORY_LISTS = data.categoryLists;
+      render();
+      showToast('Daten wurden aus der Cloud aktualisiert.');
+    }, function(err){
+      console.warn('Cloud-Synchronisierung gestört', err);
+    });
+  }catch(e){
+    console.warn('Cloud-Initialisierung fehlgeschlagen', e);
+  }
+}
+function pushToCloud(dataObj){
+  if(!cloudEnabled || !cloudDocRef) return;
+  clearTimeout(cloudPushTimer);
+  cloudPushTimer = setTimeout(()=>{
+    const snap = JSON.stringify(dataObj);
+    lastAppliedSnapshot = snap;
+    cloudDocRef.set(dataObj).catch(err=> console.warn('Cloud-Speichern fehlgeschlagen', err));
+  }, 500);
+}
+
+let lastLocalSnapshot = null;
+function currentDataObject(){
+  return {users:USERS, devices:DEVICES, licenses:LICENSES, procurement:PROCUREMENT, categoryLists:CATEGORY_LISTS};
+}
+function loadPersistedData(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return;
+    const saved = JSON.parse(raw);
+    if(Array.isArray(saved.users)) USERS = saved.users;
+    if(Array.isArray(saved.devices)) DEVICES = saved.devices;
+    if(Array.isArray(saved.licenses)) LICENSES = saved.licenses;
+    if(Array.isArray(saved.procurement)) PROCUREMENT = saved.procurement;
+    if(saved.categoryLists) CATEGORY_LISTS = saved.categoryLists;
+  }catch(e){
+    console.warn('Gespeicherte Daten konnten nicht geladen werden', e);
+  }
+}
+function savePersistedData(){
+  const dataObj = currentDataObject();
+  const snap = JSON.stringify(dataObj);
+  if(snap === lastLocalSnapshot) return; // nichts hat sich geändert — nichts zu tun
+  lastLocalSnapshot = snap;
+  if(storageAvailable){
+    try{ localStorage.setItem(STORAGE_KEY, snap); }
+    catch(e){ storageAvailable = false; console.warn('Daten konnten nicht lokal gespeichert werden', e); }
+  }
+  pushToCloud(dataObj);
+}
+function resetToSeedData(){
+  if(!confirm('Wirklich alle lokal gespeicherten Änderungen verwerfen und auf die ursprünglich importierten Daten zurücksetzen? Das kann nicht rückgängig gemacht werden.')) return;
+  USERS = JSON.parse(JSON.stringify(SEED_USERS));
+  DEVICES = JSON.parse(JSON.stringify(SEED_DEVICES));
+  LICENSES = JSON.parse(JSON.stringify(SEED_LICENSES));
+  PROCUREMENT = JSON.parse(JSON.stringify(SEED_PROCUREMENT));
+  CATEGORY_LISTS = JSON.parse(JSON.stringify(SEED_CATEGORY_LISTS));
+  try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+  closeModal();
+  showToast('Auf Ausgangsdaten zurückgesetzt.');
+  goTo('dashboard');
+}
+loadPersistedData();
+initCloud();
+
+/* =========================================================
    HELPERS — Ampel / KPIs
    ========================================================= */
 function ampelForDevice(dev){
@@ -699,9 +838,43 @@ function statusBadgeClass(status){
   const map = {'Im Einsatz':'badge-blue','Im Lager':'badge-gray','Bestellt':'badge-gray','Geliefert':'badge-gray','Ersatzgerät':'badge-blue','Reparatur':'badge-amber','Defekt':'badge-red','Verloren':'badge-red','Ausgemustert':'badge-gray','Entsorgt':'badge-gray'};
   return map[status] || 'badge-gray';
 }
+function userStatusBadge(status){
+  const map = {'Aktiv':'badge-green','Beurlaubt':'badge-amber','Elternzeit':'badge-amber','Ausgeschieden':'badge-gray','Siehe Kommentar':'badge-gray'};
+  return map[status] || 'badge-gray';
+}
 function userById(id){ return USERS.find(u=>u.id===id); }
 function deviceById(id){ return DEVICES.find(dv=>dv.id===id); }
 function devicesForUser(userId){ return DEVICES.filter(dv=>dv.userId===userId); }
+
+/* ---- Generisches Sortieren für Tabellen ---- */
+function toggleSort(view, key){
+  const s = state.sort[view];
+  if(s.key === key){ s.dir = s.dir === 'asc' ? 'desc' : 'asc'; }
+  else { s.key = key; s.dir = 'asc'; }
+  render();
+}
+function sortIndicator(view, key){
+  const s = state.sort[view];
+  if(s.key !== key) return '';
+  return `<span style="font-size:10px; margin-left:3px;">${s.dir==='asc' ? '▲' : '▼'}</span>`;
+}
+function sortableTh(view, key, label){
+  return `<th style="cursor:pointer; user-select:none; white-space:nowrap;" onclick="toggleSort('${view}','${key}')">${label}${sortIndicator(view,key)}</th>`;
+}
+function applySort(list, view, accessor){
+  const s = state.sort[view];
+  const sorted = [...list].sort((a,b)=>{
+    let av = accessor(a, s.key), bv = accessor(b, s.key);
+    if(typeof av === 'string') av = av.toLowerCase();
+    if(typeof bv === 'string') bv = bv.toLowerCase();
+    if(av == null) av = '';
+    if(bv == null) bv = '';
+    if(av < bv) return s.dir === 'asc' ? -1 : 1;
+    if(av > bv) return s.dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+  return sorted;
+}
 
 /* =========================================================
    APP STATE
@@ -719,9 +892,18 @@ const state = {
   currentDeviceId: null,
 
   userQuery: '',
+  userFilter: {department:'alle', status:'alle'},
   currentUserId: null,
 
+  licenseFilter: {status:'alle'},
+
   procurementCategory: 'alle',
+
+  sort: {
+    devices: {key:'id', dir:'asc'},
+    users: {key:'name', dir:'asc'},
+    licenses: {key:'software', dir:'asc'},
+  },
 
   qrSelected: new Set(),
   qrLabelLayout: 'standard-klein',
@@ -748,6 +930,7 @@ function showToast(msg){
    RENDER — root dispatcher
    ========================================================= */
 function render(){
+  savePersistedData();
   const app = document.getElementById('app');
   app.innerHTML = `
     ${state.mobileSidebarOpen ? `<div class="sidebar-scrim" onclick="closeMobileSidebar()"></div>` : ''}
@@ -783,14 +966,22 @@ function renderSidebar(){
       ${navItem('licenses','Lizenzen','licenses')}
       ${navItem('procurement','Beschaffungsrichtlinie','catalog')}
       ${navItem('qr','QR-Code-Center','qr')}
+      ${navItem('settings','Einstellungen','settings')}
     </ul>
     <div class="sidebar-footer">
+      <div class="reset-link-wrap" style="margin-bottom:8px; font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:6px; padding-left:6px;">
+        <span class="dot ${cloudEnabled?'dot-green':'dot-gray'}"></span>
+        ${cloudEnabled ? 'Cloud-Sync aktiv (alle Geräte)' : 'Nur lokal gespeichert (dieses Gerät)'}
+      </div>
       <div class="role-pill" onclick="openRoleModal()">
         ${icon('user')}
         <div class="role-text">
           <div style="font-weight:700; color:var(--text);">${state.role}</div>
           <div>Rolle wechseln</div>
         </div>
+      </div>
+      <div class="reset-link-wrap" style="margin-top:8px;">
+        <button class="btn btn-ghost btn-sm" style="width:100%; justify-content:flex-start; color:var(--text-muted); padding-left:6px;" onclick="resetToSeedData()" title="Alle lokalen Änderungen verwerfen">${icon('archive')} Auf Ausgangsdaten zurücksetzen</button>
       </div>
     </div>
   </div>`;
@@ -846,6 +1037,7 @@ function renderView(){
     case 'licenses': return renderLicenses();
     case 'procurement': return renderProcurement();
     case 'qr': return renderQrCenter();
+    case 'settings': return renderSettings();
     default: return '';
   }
 }
@@ -922,15 +1114,28 @@ function warnCard(num, label, onclick){
 function setDeviceFilter(status, type){
   state.deviceFilter.status = status; state.deviceFilter.type = type; state.view='devices'; state.currentDeviceId=null; render();
 }
+function deviceSortValue(dv, key){
+  switch(key){
+    case 'id': return dv.id;
+    case 'name': return dv.name;
+    case 'type': return dv.type;
+    case 'status': return dv.status;
+    case 'userName': return dv.userName || '';
+    case 'issuedDate': return dv.issuedDate || '';
+    case 'replacement': return dv.replacementPlanned || '';
+    default: return '';
+  }
+}
 function filteredDevices(){
   const f = state.deviceFilter;
   const q = f.query.trim().toLowerCase();
-  return DEVICES.filter(dv=>{
+  const filtered = DEVICES.filter(dv=>{
     if(f.status!=='alle' && dv.status!==f.status) return false;
     if(f.type!=='alle' && dv.type!==f.type) return false;
     if(q && !(dv.id.toLowerCase().includes(q) || dv.name.toLowerCase().includes(q) || (dv.userName||'').toLowerCase().includes(q))) return false;
     return true;
   });
+  return applySort(filtered, 'devices', deviceSortValue);
 }
 function renderDevicesList(){
   const list = filteredDevices();
@@ -946,11 +1151,11 @@ function renderDevicesList(){
       <input class="filter-select" style="min-width:220px" type="text" placeholder="Suchen nach ID, Modell, Benutzer…" value="${escapeAttr(state.deviceFilter.query)}" oninput="state.deviceFilter.query=this.value; render();">
       <select class="filter-select" onchange="state.deviceFilter.status=this.value; render();">
         <option value="alle" ${state.deviceFilter.status==='alle'?'selected':''}>Alle Status</option>
-        ${STATUS_LIST.map(s=>`<option value="${s}" ${state.deviceFilter.status===s?'selected':''}>${s}</option>`).join('')}
+        ${CATEGORY_LISTS.deviceStatus.map(s=>`<option value="${s}" ${state.deviceFilter.status===s?'selected':''}>${s}</option>`).join('')}
       </select>
       <select class="filter-select" onchange="state.deviceFilter.type=this.value; render();">
         <option value="alle" ${state.deviceFilter.type==='alle'?'selected':''}>Alle Gerätetypen</option>
-        ${TYPES.map(t=>`<option value="${t}" ${state.deviceFilter.type===t?'selected':''}>${t}</option>`).join('')}
+        ${CATEGORY_LISTS.deviceTypes.map(t=>`<option value="${t}" ${state.deviceFilter.type===t?'selected':''}>${t}</option>`).join('')}
       </select>
       <div style="flex:1"></div>
       <div class="view-toggle">
@@ -964,7 +1169,15 @@ function renderDevicesList(){
 }
 function renderDevicesTable(list){
   return `<div class="card"><div class="table-wrap"><table class="data-table">
-    <thead><tr><th>Inventar-ID</th><th>Gerät</th><th>Typ</th><th>Status</th><th>Benutzer</th><th>Ausgegeben am</th><th>Austausch</th></tr></thead>
+    <thead><tr>
+      ${sortableTh('devices','id','Inventar-ID')}
+      ${sortableTh('devices','name','Gerät')}
+      ${sortableTh('devices','type','Typ')}
+      ${sortableTh('devices','status','Status')}
+      ${sortableTh('devices','userName','Benutzer')}
+      ${sortableTh('devices','issuedDate','Ausgegeben am')}
+      ${sortableTh('devices','replacement','Austausch')}
+    </tr></thead>
     <tbody>
       ${list.map(dv=>{
         const a = ampelForDevice(dv);
@@ -1215,9 +1428,27 @@ function resetPostpone(id){
 /* =========================================================
    MITARBEITENDE
    ========================================================= */
+function userSortValue(u, key){
+  switch(key){
+    case 'name': return u.name;
+    case 'initials': return u.initials;
+    case 'department': return u.department;
+    case 'status': return u.status;
+    case 'devices': return devicesForUser(u.id).length;
+    default: return '';
+  }
+}
 function renderUsersList(){
   const q = state.userQuery.trim().toLowerCase();
-  const list = USERS.filter(u=> !q || u.name.toLowerCase().includes(q) || u.department.toLowerCase().includes(q));
+  const departments = [...new Set(USERS.map(u=>u.department))].sort();
+  const f = state.userFilter;
+  let list = USERS.filter(u=>{
+    if(f.department!=='alle' && u.department!==f.department) return false;
+    if(f.status!=='alle' && u.status!==f.status) return false;
+    if(q && !(u.name.toLowerCase().includes(q) || u.department.toLowerCase().includes(q))) return false;
+    return true;
+  });
+  list = applySort(list, 'users', userSortValue);
   return `
     <div class="page-header">
       <div><div class="page-title">Mitarbeitende</div><div class="page-sub">${USERS.filter(u=>u.status==='Aktiv').length} aktive Mitarbeitende</div></div>
@@ -1226,10 +1457,25 @@ function renderUsersList(){
       </div>
     </div>
     <div class="toolbar">
-      <input class="filter-select" style="min-width:280px" type="text" placeholder="Name oder Abteilung suchen…" value="${escapeAttr(state.userQuery)}" oninput="state.userQuery=this.value; render();">
+      <input class="filter-select" style="min-width:220px" type="text" placeholder="Name oder Abteilung suchen…" value="${escapeAttr(state.userQuery)}" oninput="state.userQuery=this.value; render();">
+      <select class="filter-select" onchange="state.userFilter.department=this.value; render();">
+        <option value="alle" ${f.department==='alle'?'selected':''}>Alle Abteilungen</option>
+        ${departments.map(d=>`<option value="${escapeAttr(d)}" ${f.department===d?'selected':''}>${d}</option>`).join('')}
+      </select>
+      <select class="filter-select" onchange="state.userFilter.status=this.value; render();">
+        <option value="alle" ${f.status==='alle'?'selected':''}>Alle Status</option>
+        ${CATEGORY_LISTS.userStatus.map(s=>`<option value="${s}" ${f.status===s?'selected':''}>${s}</option>`).join('')}
+      </select>
     </div>
+    ${list.length===0 ? emptyState('Keine Mitarbeitenden gefunden','Passe die Filter an oder setze die Suche zurück.') : `
     <div class="card"><div class="table-wrap"><table class="data-table">
-      <thead><tr><th>Name</th><th>Kürzel</th><th>Abteilung</th><th>Status</th><th>Geräte</th></tr></thead>
+      <thead><tr>
+        ${sortableTh('users','name','Name')}
+        ${sortableTh('users','initials','Kürzel')}
+        ${sortableTh('users','department','Abteilung')}
+        ${sortableTh('users','status','Status')}
+        ${sortableTh('users','devices','Geräte')}
+      </tr></thead>
       <tbody>
         ${list.map(u=>{
           const devCount = devicesForUser(u.id).length;
@@ -1237,12 +1483,12 @@ function renderUsersList(){
             <td data-label="Name"><span class="cell-strong">${u.name}</span></td>
             <td data-label="Kürzel"><span class="id-mono">${u.initials}</span></td>
             <td data-label="Abteilung">${u.department}</td>
-            <td data-label="Status"><span class="badge ${u.status==='Aktiv'?'badge-green':'badge-gray'}">${u.status}</span></td>
+            <td data-label="Status"><span class="badge ${userStatusBadge(u.status)}">${u.status}</span></td>
             <td data-label="Geräte">${devCount}</td>
           </tr>`;
         }).join('')}
       </tbody>
-    </table></div></div>
+    </table></div></div>`}
   `;
 }
 function openUser(id){ closeModal(); state.view='users'; state.currentUserId=id; render(); window.scrollTo(0,0); }
@@ -1260,10 +1506,12 @@ function renderUserDetail(id){
         <div style="flex:1; min-width:220px;">
           <div style="font-size:19px; font-weight:700;">${u.name}</div>
           <div class="cell-muted">${u.department}</div>
-          <div class="detail-badges"><span class="badge ${u.status==='Aktiv'?'badge-green':'badge-gray'}">${u.status}</span></div>
-          ${canEdit() ? `<div class="detail-actions">
+          <div class="detail-badges"><span class="badge ${userStatusBadge(u.status)}">${u.status}</span></div>
+          ${canEdit() ? `<div class="detail-actions" style="align-items:center;">
             <button class="btn btn-sm" onclick="openUserEditModal('${u.id}')">${icon('edit')} Bearbeiten</button>
-            <button class="btn btn-sm ${u.status==='Aktiv'?'btn-danger':''}" onclick="toggleUserStatus('${u.id}')">${icon('user')} ${u.status==='Aktiv'?'Als ausgeschieden markieren':'Als aktiv markieren'}</button>
+            <select style="height:38px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:0 10px; background:#fff;" onchange="setUserStatus('${u.id}', this.value)">
+              ${CATEGORY_LISTS.userStatus.map(s=>`<option value="${s}" ${u.status===s?'selected':''}>${s}</option>`).join('')}
+            </select>
           </div>` : ''}
         </div>
       </div>
@@ -1368,10 +1616,10 @@ function saveUserEdit(id){
   }
   render();
 }
-function toggleUserStatus(id){
+function setUserStatus(id, status){
   const u = userById(id);
-  u.status = u.status==='Aktiv' ? 'Ausgeschieden' : 'Aktiv';
-  showToast('Status geändert zu: '+u.status);
+  u.status = status;
+  showToast('Status geändert zu: '+status);
   render();
 }
 
@@ -1382,7 +1630,23 @@ function licenseStatusBadge(status){
   const map = {'Aktiv':'badge-green','Gekündigt':'badge-gray','Läuft aus':'badge-amber'};
   return map[status] || 'badge-gray';
 }
+function licenseSortValue(l, key){
+  switch(key){
+    case 'software': return l.software;
+    case 'vendor': return l.vendor;
+    case 'purchased': return l.purchased;
+    case 'assigned': return licenseAssignedCount(l.software);
+    case 'free': return l.purchased - licenseAssignedCount(l.software);
+    case 'cost': return l.costPerLicense;
+    case 'total': return l.costPerLicense * l.purchased;
+    case 'status': return l.status;
+    default: return '';
+  }
+}
 function renderLicenses(){
+  const f = state.licenseFilter;
+  let list = LICENSES.filter(l=> f.status==='alle' || l.status===f.status);
+  list = applySort(list, 'licenses', licenseSortValue);
   return `
     <div class="page-header">
       <div><div class="page-title">Lizenzverwaltung</div><div class="page-sub">${LICENSES.length} Softwareprodukte im Bestand</div></div>
@@ -1391,10 +1655,27 @@ function renderLicenses(){
       </div>
     </div>
     <div class="notice">${icon('info')}<div>„Vergeben" wird automatisch aus den Lizenz-Zuordnungen der Mitarbeitenden berechnet. Lizenzen weist du direkt auf der Detailseite einer Person zu: <strong>Mitarbeitende → Person auswählen → „Lizenzen zuweisen"</strong>.</div></div>
+    <div class="toolbar">
+      <select class="filter-select" onchange="state.licenseFilter.status=this.value; render();">
+        <option value="alle" ${f.status==='alle'?'selected':''}>Alle Status</option>
+        ${CATEGORY_LISTS.licenseStatus.map(s=>`<option value="${s}" ${f.status===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    ${list.length===0 ? emptyState('Keine Lizenzen gefunden','Passe den Filter an.') : `
     <div class="card"><div class="table-wrap"><table class="data-table">
-      <thead><tr><th>Software</th><th>Hersteller</th><th>Gekauft</th><th>Vergeben</th><th>Frei</th><th>Kosten pro Lizenz/Jahr</th><th>Gesamt/Jahr</th><th>Status</th><th>Kommentar</th>${canEdit()?'<th></th>':''}</tr></thead>
+      <thead><tr>
+        ${sortableTh('licenses','software','Software')}
+        ${sortableTh('licenses','vendor','Hersteller')}
+        ${sortableTh('licenses','purchased','Gekauft')}
+        ${sortableTh('licenses','assigned','Vergeben')}
+        ${sortableTh('licenses','free','Frei')}
+        ${sortableTh('licenses','cost','Kosten pro Lizenz/Jahr')}
+        ${sortableTh('licenses','total','Gesamt/Jahr')}
+        ${sortableTh('licenses','status','Status')}
+        <th>Kommentar</th>${canEdit()?'<th></th>':''}
+      </tr></thead>
       <tbody>
-        ${LICENSES.map(l=>{
+        ${list.map(l=>{
           const assigned = licenseAssignedCount(l.software);
           const free = l.purchased-assigned;
           return `<tr>
@@ -1414,7 +1695,7 @@ function renderLicenses(){
           </tr>`;
         }).join('')}
       </tbody>
-    </table></div></div>
+    </table></div></div>`}
   `;
 }
 
@@ -1461,7 +1742,7 @@ function licenseEditModal(id){
         <div class="form-field"><label>Hersteller</label><input id="le-vendor" value="${escapeAttr(l.vendor||'')}"></div>
         <div class="form-field"><label>Status</label>
           <select id="le-status">
-            ${['Aktiv','Läuft aus','Gekündigt'].map(s=>`<option value="${s}" ${l.status===s?'selected':''}>${s}</option>`).join('')}
+            ${CATEGORY_LISTS.licenseStatus.map(s=>`<option value="${s}" ${l.status===s?'selected':''}>${s}</option>`).join('')}
           </select>
         </div>
         <div class="form-field"><label>Anzahl gekauft</label><input id="le-purchased" type="number" min="0" value="${l.purchased!=null?l.purchased:''}"></div>
@@ -1700,6 +1981,75 @@ function printSelectedQrPreview(){
 }
 
 /* =========================================================
+   EINSTELLUNGEN — Gerätetypen & Status-Werte selbst verwalten
+   ========================================================= */
+const CATEGORY_META = {
+  deviceTypes: {title:'Gerätetypen', hint:'Diese Typen erscheinen in der Geräteverwaltung (Filter & Bearbeiten-Formular).'},
+  deviceStatus: {title:'Gerätestatus', hint:'Diese Status erscheinen in der Geräteverwaltung (Filter & Bearbeiten-Formular).'},
+  userStatus: {title:'Mitarbeitenden-Status', hint:'Diese Status erscheinen bei Mitarbeitenden (Filter, Bearbeiten-Formular und Statusauswahl auf der Detailseite).'},
+  licenseStatus: {title:'Lizenzstatus', hint:'Diese Status erscheinen in der Lizenzverwaltung (Filter & Bearbeiten-Formular).'},
+};
+function countCategoryUsage(listName, value){
+  switch(listName){
+    case 'deviceTypes': return DEVICES.filter(d=>d.type===value).length;
+    case 'deviceStatus': return DEVICES.filter(d=>d.status===value).length;
+    case 'userStatus': return USERS.filter(u=>u.status===value).length;
+    case 'licenseStatus': return LICENSES.filter(l=>l.status===value).length;
+    default: return 0;
+  }
+}
+function addCategoryValue(listName){
+  const input = document.getElementById('cat-input-'+listName);
+  const value = input.value.trim();
+  if(!value) return;
+  if(CATEGORY_LISTS[listName].includes(value)){ showToast('„'+value+'" ist bereits vorhanden.'); return; }
+  CATEGORY_LISTS[listName].push(value);
+  input.value = '';
+  render();
+  setTimeout(()=>{ const el=document.getElementById('cat-input-'+listName); if(el) el.focus(); }, 30);
+}
+function removeCategoryValue(listName, value){
+  const usage = countCategoryUsage(listName, value);
+  const msg = usage>0
+    ? `„${value}" wird aktuell von ${usage} Eintrag/Einträgen verwendet. Trotzdem aus der Auswahlliste entfernen? Bestehende Einträge behalten ihren Wert, er lässt sich nur für neue Auswahl nicht mehr auswählen.`
+    : `„${value}" wirklich entfernen?`;
+  if(!confirm(msg)) return;
+  const idx = CATEGORY_LISTS[listName].indexOf(value);
+  if(idx > -1) CATEGORY_LISTS[listName].splice(idx, 1);
+  render();
+}
+function renderSettings(){
+  return `
+    <div class="page-header">
+      <div><div class="page-title">Einstellungen</div><div class="page-sub">Gerätetypen und Status-Werte selbst verwalten — neue Begriffe hinzufügen oder nicht mehr benötigte entfernen.</div></div>
+    </div>
+    ${!canEdit() ? `<div class="notice">${icon('info')}<div>Deine aktuelle Rolle „${state.role}" erlaubt keine Änderungen. Wechsle zu „IT-Bearbeitung" oder „IT-Administrator", um Kategorien zu bearbeiten.</div></div>` : ''}
+    <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(320px,1fr));">
+      ${Object.keys(CATEGORY_META).map(listName=>{
+        const meta = CATEGORY_META[listName];
+        const values = CATEGORY_LISTS[listName];
+        return `<div class="card">
+          <div class="card-header"><h3>${meta.title}</h3><span class="badge badge-blue">${values.length}</span></div>
+          <div class="card-pad">
+            <div class="cell-muted" style="font-size:12px; margin-bottom:12px;">${meta.hint}</div>
+            <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:${canEdit()?'16px':'0'};">
+              ${values.map(v=>`<span class="badge badge-gray" style="padding:6px 8px 6px 12px; font-size:12.5px; font-weight:600;">
+                ${escapeHtml(v)}
+                ${canEdit() ? `<button class="icon-btn" style="width:20px; height:20px; margin-left:2px;" title="Entfernen" onclick="removeCategoryValue('${listName}','${v.replace(/'/g,"\\'")}')">${icon('close')}</button>` : ''}
+              </span>`).join('')}
+            </div>
+            ${canEdit() ? `<div style="display:flex; gap:8px;">
+              <input id="cat-input-${listName}" type="text" placeholder="Neuen Wert hinzufügen…" style="flex:1; height:38px; border:1px solid var(--border); border-radius:var(--radius-sm); padding:0 12px;" onkeydown="if(event.key==='Enter') addCategoryValue('${listName}');">
+              <button class="btn btn-primary btn-sm" onclick="addCategoryValue('${listName}')">${icon('plus')} Hinzufügen</button>
+            </div>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+/* =========================================================
    GERÄT FINDEN — QR-Scan (Kamera) + Code-Eingabe
    ========================================================= */
 function openFinderModal(){
@@ -1932,8 +2282,7 @@ function userEditModal(id){
         </div>
         <div class="form-field"><label>Status</label>
           <select id="ue-status">
-            <option value="Aktiv" ${(!u.status||u.status==='Aktiv')?'selected':''}>Aktiv</option>
-            <option value="Ausgeschieden" ${u.status==='Ausgeschieden'?'selected':''}>Ausgeschieden</option>
+            ${CATEGORY_LISTS.userStatus.map(s=>`<option value="${s}" ${(u.status===s || (!u.status && s==='Aktiv'))?'selected':''}>${s}</option>`).join('')}
           </select>
         </div>
         <div class="form-field full"><label>Kommentar</label><textarea id="ue-comment">${escapeHtml(u.comment||'')}</textarea></div>
@@ -1992,10 +2341,10 @@ function deviceEditModal(id){
     <div class="modal-body">
       <div class="form-grid">
         <div class="form-field"><label>Gerätetyp</label>
-          <select id="de-type">${TYPES.map(t=>`<option value="${t}" ${dv.type===t?'selected':''}>${t}</option>`).join('')}</select>
+          <select id="de-type">${CATEGORY_LISTS.deviceTypes.map(t=>`<option value="${t}" ${dv.type===t?'selected':''}>${t}</option>`).join('')}</select>
         </div>
         <div class="form-field"><label>Status</label>
-          <select id="de-status">${STATUS_LIST.map(s=>`<option value="${s}" ${dv.status===s?'selected':''}>${s}</option>`).join('')}</select>
+          <select id="de-status">${CATEGORY_LISTS.deviceStatus.map(s=>`<option value="${s}" ${dv.status===s?'selected':''}>${s}</option>`).join('')}</select>
         </div>
         <div class="form-field"><label>Marke</label><input id="de-brand" value="${escapeAttr(dv.brand||'')}"></div>
         <div class="form-field"><label>Modell</label><input id="de-model" value="${escapeAttr(dv.model||'')}"></div>
