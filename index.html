@@ -478,8 +478,8 @@ table.data-table{width:100%; border-collapse:collapse; font-size:13px;}
 .label-text .lt-id{font-family:'Cascadia Code', Consolas, monospace; font-weight:800; font-size:11px;}
 .label-text .lt-name{font-size:9px; color:#444; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 </style>
-<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js" onerror="window.__firebaseLoadFailed=true"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js" onerror="window.__firebaseLoadFailed=true"></script>
 </head>
 <body>
 
@@ -737,24 +737,33 @@ let cloudEnabled = false;
 let cloudDocRef = null;
 let cloudPushTimer = null;
 let lastAppliedSnapshot = null;
+let cloudStatusReason = 'Noch nicht verbunden…';
 
 function cloudConfigured(){
   return CLOUD_CONFIG.apiKey && CLOUD_CONFIG.apiKey.indexOf('DEIN-') !== 0;
 }
 function initCloud(){
-  if(!cloudConfigured()) return;
-  if(typeof firebase === 'undefined'){ console.warn('Firebase-SDK konnte nicht geladen werden.'); return; }
+  if(!cloudConfigured()){ cloudStatusReason = 'Cloud-Speicher ist nicht konfiguriert.'; render(); return; }
+  if(typeof firebase === 'undefined'){
+    cloudStatusReason = window.__firebaseLoadFailed
+      ? 'Die Firebase-Bibliothek konnte nicht geladen werden — vermutlich blockiert das Netzwerk (WLAN/Firewall) die Adresse gstatic.com. Versuch es über Mobilfunkdaten statt WLAN.'
+      : 'Die Firebase-Bibliothek wurde noch nicht geladen (Netzwerk sehr langsam?).';
+    render();
+    return;
+  }
   try{
     firebase.initializeApp(CLOUD_CONFIG);
     const db = firebase.firestore();
     cloudDocRef = db.collection(CLOUD_DOC_PATH.collection).doc(CLOUD_DOC_PATH.doc);
-    cloudEnabled = true;
     cloudDocRef.onSnapshot(function(snap){
-      if(!snap.exists) return;
+      cloudEnabled = true;
+      cloudStatusReason = 'Verbunden.';
+      if(!snap.exists) { render(); return; }
       const data = snap.data();
       const incoming = JSON.stringify(data);
-      if(incoming === lastAppliedSnapshot) return; // eigene Änderung, kein erneutes Anwenden nötig
+      if(incoming === lastAppliedSnapshot) { render(); return; } // eigene Änderung, kein erneutes Anwenden nötig
       lastAppliedSnapshot = incoming;
+      lastLocalSnapshot = incoming; // verhindert, dass wir das gerade Empfangene gleich wieder zurückschreiben
       if(Array.isArray(data.users)) USERS = data.users;
       if(Array.isArray(data.devices)) DEVICES = data.devices;
       if(Array.isArray(data.licenses)) LICENSES = data.licenses;
@@ -763,11 +772,22 @@ function initCloud(){
       render();
       showToast('Daten wurden aus der Cloud aktualisiert.');
     }, function(err){
+      cloudEnabled = false;
+      cloudStatusReason = 'Verbindungsfehler: '+(err.code||'')+' '+(err.message||err);
       console.warn('Cloud-Synchronisierung gestört', err);
+      render();
     });
   }catch(e){
+    cloudEnabled = false;
+    cloudStatusReason = 'Fehler beim Verbindungsaufbau: '+e.message;
     console.warn('Cloud-Initialisierung fehlgeschlagen', e);
+    render();
   }
+}
+function retryCloudInit(){
+  cloudStatusReason = 'Verbindungsversuch läuft…';
+  render();
+  setTimeout(initCloud, 50);
 }
 function pushToCloud(dataObj){
   if(!cloudEnabled || !cloudDocRef) return;
@@ -821,7 +841,7 @@ function resetToSeedData(){
   goTo('dashboard');
 }
 loadPersistedData();
-initCloud();
+setTimeout(initCloud, 0);
 
 /* =========================================================
    HELPERS — Ampel / KPIs
@@ -969,9 +989,15 @@ function renderSidebar(){
       ${navItem('settings','Einstellungen','settings')}
     </ul>
     <div class="sidebar-footer">
-      <div class="reset-link-wrap" style="margin-bottom:8px; font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:6px; padding-left:6px;">
-        <span class="dot ${cloudEnabled?'dot-green':'dot-gray'}"></span>
-        ${cloudEnabled ? 'Cloud-Sync aktiv (alle Geräte)' : 'Nur lokal gespeichert (dieses Gerät)'}
+      <div class="reset-link-wrap" style="margin-bottom:8px; font-size:11px; color:var(--text-muted); padding-left:6px;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span class="dot ${cloudEnabled?'dot-green':'dot-gray'}"></span>
+          ${cloudEnabled ? 'Cloud-Sync aktiv (alle Geräte)' : 'Nur lokal gespeichert (dieses Gerät)'}
+        </div>
+        ${!cloudEnabled && cloudConfigured() ? `
+          <div style="margin-top:4px; line-height:1.4;">${escapeHtml(cloudStatusReason)}</div>
+          <button class="btn btn-ghost btn-sm" style="padding:2px 0; height:auto; color:var(--blue-600); font-weight:700;" onclick="retryCloudInit()">${icon('swap')} Erneut verbinden</button>
+        ` : ''}
       </div>
       <div class="role-pill" onclick="openRoleModal()">
         ${icon('user')}
