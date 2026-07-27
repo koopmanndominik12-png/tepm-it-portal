@@ -462,7 +462,7 @@ table.data-table{width:100%; border-collapse:collapse; font-size:13px;}
 @media print{
   body *{visibility:hidden;}
   #print-area, #print-area *{visibility:visible;}
-  #print-area{position:absolute; left:0; top:0; width:100%;}
+  #print-area{display:block !important; position:absolute; left:0; top:0; width:100%;}
   @page{ size:A4; margin:10mm; }
 }
 #print-area{display:none;}
@@ -1293,15 +1293,36 @@ function renderUserDetail(id){
       }).join('')}
     </div>`}
 
-    <div class="section-title">Zugewiesene Lizenzen (${licenseNames.length})</div>
-    ${licenseNames.length===0? emptyState('Keine Lizenzen zugewiesen','In der Quelltabelle ist für diese Person aktuell keine Lizenz eingetragen.') : `
+    <div class="section-title" style="display:flex; align-items:center; justify-content:space-between;">
+      <span>Zugewiesene Lizenzen (${licenseNames.length})</span>
+      ${canEdit() ? `<button class="btn btn-sm" onclick="openAssignLicensesModal('${u.id}')">${icon('plus')} Lizenzen zuweisen</button>` : ''}
+    </div>
+    ${licenseNames.length===0? emptyState('Keine Lizenzen zugewiesen','Über „Lizenzen zuweisen" oben kannst du dieser Person Lizenzen zuordnen.') : `
     <div class="card-list">
-      ${licenseNames.map(n=>`<div class="list-card" onclick="goTo('licenses')">
+      ${licenseNames.map(n=>`<div class="list-card" style="cursor:default;">
         <div class="list-card-icon">${icon('licenses')}</div>
         <div class="list-card-body"><div class="list-card-title">${n}</div></div>
+        ${canEdit() ? `<button class="icon-btn" style="width:30px;height:30px;" title="Entfernen" onclick="removeAssignedLicense('${u.id}','${n.replace(/'/g,"\\'")}')">${icon('close')}</button>` : ''}
       </div>`).join('')}
     </div>`}
   `;
+}
+
+function openAssignLicensesModal(userId){ state.modal={type:'assign-licenses', payload:{userId}}; render(); }
+function addAssignedLicense(userId, software){
+  if(!software) return;
+  const u = userById(userId);
+  const current = (u.assignedLicensesRaw||'').split(',').map(s=>s.trim()).filter(Boolean);
+  if(!current.includes(software)) current.push(software);
+  u.assignedLicensesRaw = current.join(', ');
+  render();
+}
+function removeAssignedLicense(userId, software){
+  const u = userById(userId);
+  const current = (u.assignedLicensesRaw||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const updated = current.filter(s=>s!==software);
+  u.assignedLicensesRaw = updated.length ? updated.join(', ') : null;
+  render();
 }
 
 function openUserEditModal(id){ state.modal={type:'user-edit', payload:{id}}; render(); }
@@ -1369,7 +1390,7 @@ function renderLicenses(){
         ${canEdit() ? `<button class="btn btn-primary" onclick="openLicenseEditModal(null)">${icon('plus')} Neue Lizenz</button>` : ''}
       </div>
     </div>
-    <div class="notice">${icon('info')}<div>„Vergeben" wird aus der Spalte <strong>Zugewiesene Lizenzen</strong> in der Mitarbeitenden-Tabelle berechnet. Dort ist aktuell noch nichts eingetragen — sobald Zuordnungen gepflegt sind, aktualisieren sich die Zahlen automatisch.</div></div>
+    <div class="notice">${icon('info')}<div>„Vergeben" wird automatisch aus den Lizenz-Zuordnungen der Mitarbeitenden berechnet. Lizenzen weist du direkt auf der Detailseite einer Person zu: <strong>Mitarbeitende → Person auswählen → „Lizenzen zuweisen"</strong>.</div></div>
     <div class="card"><div class="table-wrap"><table class="data-table">
       <thead><tr><th>Software</th><th>Hersteller</th><th>Gekauft</th><th>Vergeben</th><th>Frei</th><th>Kosten pro Lizenz/Jahr</th><th>Gesamt/Jahr</th><th>Status</th><th>Kommentar</th>${canEdit()?'<th></th>':''}</tr></thead>
       <tbody>
@@ -1783,6 +1804,7 @@ function renderModal(){
   if(m.type==='retire') return retireModal(m.payload.id);
   if(m.type==='postpone') return postponeModal(m.payload.id);
   if(m.type==='user-edit') return userEditModal(m.payload.id);
+  if(m.type==='assign-licenses') return assignLicensesModal(m.payload.userId);
   if(m.type==='license-edit') return licenseEditModal(m.payload.id);
   if(m.type==='license-delete') return licenseDeleteModal(m.payload.id);
   if(m.type==='procurement-edit') return procurementEditModal(m.payload.index);
@@ -1923,6 +1945,44 @@ function userEditModal(id){
     </div>
   `, true);
 }
+function assignLicensesModal(userId){
+  const u = userById(userId);
+  const assigned = (u.assignedLicensesRaw||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const available = LICENSES.filter(l=> !assigned.includes(l.software));
+  return modalWrap(`
+    <div class="modal-header"><h3>Lizenzen zuweisen — ${u.name}</h3><button class="icon-btn" onclick="closeModal()">${icon('close')}</button></div>
+    <div class="modal-body">
+      ${assigned.length ? `
+        <div class="cell-muted" style="font-weight:700; text-transform:uppercase; font-size:11px; letter-spacing:.03em; margin-bottom:8px;">Bereits zugewiesen</div>
+        <div class="card-list" style="margin-bottom:16px;">
+          ${assigned.map(n=>`<div class="list-card" style="cursor:default;">
+            <div class="list-card-icon">${icon('licenses')}</div>
+            <div class="list-card-body"><div class="list-card-title">${n}</div></div>
+            <button class="icon-btn" style="width:30px;height:30px;" title="Entfernen" onclick="removeAssignedLicense('${userId}','${n.replace(/'/g,"\\'")}'); reopenAssignLicensesModal('${userId}');">${icon('close')}</button>
+          </div>`).join('')}
+        </div>
+      ` : `<div class="cell-muted" style="margin-bottom:16px;">Dieser Person ist noch keine Lizenz zugewiesen.</div>`}
+
+      ${available.length ? `
+        <div class="form-field">
+          <label>Weitere Lizenz hinzufügen</label>
+          <select id="assign-license-select" onchange="if(this.value){ addAssignedLicense('${userId}', this.value); reopenAssignLicensesModal('${userId}'); }">
+            <option value="">— Lizenz auswählen —</option>
+            ${available.map(l=>{
+              const free = l.purchased - licenseAssignedCount(l.software);
+              return `<option value="${escapeAttr(l.software)}">${escapeHtml(l.software)} (${free} frei von ${l.purchased})</option>`;
+            }).join('')}
+          </select>
+        </div>
+        <div class="cell-muted" style="margin-top:10px; font-size:12px;">Nach der Auswahl erscheint die Lizenz oben in der Liste, und du kannst direkt die nächste hinzufügen.</div>
+      ` : `<div class="cell-muted">Alle vorhandenen Lizenzen sind dieser Person bereits zugewiesen.</div>`}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal()">Fertig</button>
+    </div>
+  `, true);
+}
+function reopenAssignLicensesModal(userId){ state.modal={type:'assign-licenses', payload:{userId}}; render(); }
 function deviceEditModal(id){
   const isNew = !id;
   const dv = isNew ? {} : deviceById(id);
