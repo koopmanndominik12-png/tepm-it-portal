@@ -2321,16 +2321,39 @@ async function startCamera(){
     render(); return;
   }
   try{
-    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    // Höhere Auflösung anfragen — hilft der Kamera oft, die schärfere Haupt-/Weitwinkellinse
+    // statt einer Ultraweitwinkel-Linse mit schlechterem Nahfokus zu wählen.
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{
+        facingMode:'environment',
+        width:{ideal:1920}, height:{ideal:1080},
+      }
+    });
     state.cameraStream = stream;
     video.srcObject = stream;
     await video.play();
     state.cameraScanning = true;
+    applySoftFocusHint(stream);
+    video.oncanplay = null;
+    video.onclick = ()=>applySoftFocusHint(stream);
     scanFrame();
   }catch(err){
     state.finderError = 'Kamera konnte nicht gestartet werden (Berechtigung verweigert oder nicht verfügbar). Bitte den Gerätecode manuell eingeben.';
     render();
   }
+}
+/* Fordert kontinuierlichen Autofokus an, wo der Browser das unterstützt (v. a. Android/Chrome).
+   Auf iOS/Safari hat dieser Aufruf keine Wirkung — Apple lässt Web-Apps grundsätzlich keinen
+   Kamera-Fokus-Zugriff, das lässt sich technisch nicht umgehen. */
+function applySoftFocusHint(stream){
+  try{
+    const track = stream.getVideoTracks()[0];
+    if(!track || !track.getCapabilities) return;
+    const caps = track.getCapabilities();
+    const advanced = [];
+    if(caps.focusMode && caps.focusMode.includes('continuous')) advanced.push({focusMode:'continuous'});
+    if(advanced.length) track.applyConstraints({advanced}).catch(()=>{});
+  }catch(e){ /* still fine, kein Blocker */ }
 }
 function stopCamera(){
   state.cameraScanning = false;
@@ -2637,9 +2660,13 @@ function finderModal(){
           <video id="finder-video" playsinline muted></video>
           <canvas id="finder-canvas" style="display:none;"></canvas>
           <div class="camera-frame"></div>
-          <div class="camera-hint">QR-Code in den Rahmen halten</div>
+          <div class="camera-hint">QR-Code in den Rahmen halten — antippen zum erneuten Fokussieren</div>
         </div>
-        <div class="cell-muted" style="margin-top:10px; font-size:12px;">Der Kamerazugriff hängt von den Berechtigungen deines Browsers ab. Funktioniert die Kamera nicht, wechsle einfach zu „Code eingeben".</div>
+        <div class="notice" style="margin-top:12px;">${icon('info')}<div>
+          <strong>Falls die Kamera nicht scharf stellt:</strong> mind. 10–15 cm Abstand zum QR-Code halten (zu nah scannen ist die häufigste Ursache für Unschärfe), das Gerät leicht vor- und zurückbewegen (löst oft den Autofokus neu aus), auf gute Beleuchtung achten und kurz auf das Kamerabild tippen.<br><br>
+          Taschenlampen- und manuelle Fokus-Steuerung sind auf iPhone/iPad technisch nicht möglich — Apple lässt das für Web-Apps grundsätzlich nicht zu. Auf Android/Chrome kann es je nach Gerät funktionieren.
+        </div></div>
+        <div class="cell-muted" style="margin-top:10px; font-size:12px;">Funktioniert das Scannen gar nicht, wechsle einfach zu „Code eingeben" — das funktioniert immer zuverlässig.</div>
       `}
       ${state.finderError ? `<div class="finder-error">${state.finderError}</div>` : ''}
     </div>
