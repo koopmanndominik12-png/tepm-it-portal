@@ -1035,6 +1035,7 @@ const state = {
 
   qrSelected: new Set(),
   qrLabelLayout: 'standard-klein',
+  qrFilter: {user:'alle', type:'alle', status:'alle'},
 
   finderTab: 'code',
   finderError: null,
@@ -2138,8 +2139,19 @@ function procurementDeleteModal(index){
 /* =========================================================
    QR-CODE-CENTER
    ========================================================= */
+function filteredQrDevices(){
+  const f = state.qrFilter;
+  return DEVICES.filter(dv=>{
+    if(f.user!=='alle' && dv.userId!==f.user) return false;
+    if(f.type!=='alle' && dv.type!==f.type) return false;
+    if(f.status!=='alle' && dv.status!==f.status) return false;
+    return true;
+  });
+}
 function renderQrCenter(){
-  const list = DEVICES;
+  const list = filteredQrDevices();
+  const f = state.qrFilter;
+  const activeUsersSorted = sortedByName(USERS.filter(u=>u.status==='Aktiv'));
   return `
     <div class="page-header">
       <div style="display:flex; gap:14px; align-items:center;">${pageIconBadge('qr','qr')}
@@ -2151,8 +2163,26 @@ function renderQrCenter(){
       </div>
     </div>
     <div class="notice">${icon('info')}<div><strong>„QR-Bilder als ZIP"</strong> liefert dir ein fertiges Bild pro Gerät (QR-Code + Beschriftung, wie im Portal zu sehen) — die fügst du in DYMO Connect einfach als Bild-Objekt auf dem Etikett ein. <strong>„CSV für DYMO Connect"</strong> ist die Alternative für alle, die in DYMO Connect selbst ein Etikett mit einem eigenen QR-Feld gestalten und per Seriendruck/Datenmerge automatisch befüllen möchten.</div></div>
+    <div class="toolbar">
+      <select class="filter-select" onchange="state.qrFilter.user=this.value; render();">
+        <option value="alle" ${f.user==='alle'?'selected':''}>Alle Mitarbeitenden</option>
+        <option value="" ${f.user===''?'selected':''}>— Nicht zugewiesen —</option>
+        ${activeUsersSorted.map(u=>`<option value="${u.id}" ${f.user===u.id?'selected':''}>${u.name}</option>`).join('')}
+      </select>
+      <select class="filter-select" onchange="state.qrFilter.type=this.value; render();">
+        <option value="alle" ${f.type==='alle'?'selected':''}>Alle Gerätetypen</option>
+        ${sortedAlpha(CATEGORY_LISTS.deviceTypes).map(t=>`<option value="${t}" ${f.type===t?'selected':''}>${t}</option>`).join('')}
+      </select>
+      <select class="filter-select" onchange="state.qrFilter.status=this.value; render();">
+        <option value="alle" ${f.status==='alle'?'selected':''}>Alle Status</option>
+        ${sortedAlpha(CATEGORY_LISTS.deviceStatus).map(s=>`<option value="${s}" ${f.status===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+      ${(f.user!=='alle'||f.type!=='alle'||f.status!=='alle') ? `<button class="btn btn-sm btn-ghost" onclick="state.qrFilter={user:'alle',type:'alle',status:'alle'}; render();">${icon('close')} Filter zurücksetzen</button>` : ''}
+      <div style="flex:1"></div>
+      <div class="cell-muted">${list.length} von ${DEVICES.length} Geräten angezeigt</div>
+    </div>
     <div class="qr-toolbar">
-      <button class="btn btn-sm" onclick="qrSelectAll()">Alle auswählen</button>
+      <button class="btn btn-sm" onclick="qrSelectAll()">${(f.user!=='alle'||f.type!=='alle'||f.status!=='alle') ? 'Gefilterte auswählen' : 'Alle auswählen'}</button>
       <button class="btn btn-sm" onclick="qrSelectNone()">Auswahl aufheben</button>
       <select class="filter-select" onchange="state.qrLabelLayout=this.value; render();">
         <option value="avery" ${state.qrLabelLayout==='avery'?'selected':''}>Etikett: Avery</option>
@@ -2168,6 +2198,7 @@ function renderQrCenter(){
       <button class="btn btn-primary" onclick="exportDymoImages()">${icon('qr')} QR-Bilder als ZIP</button>
       <button class="btn" onclick="exportDymoCsv()">${icon('archive')} CSV für DYMO Connect</button>
     </div>
+    ${list.length===0 ? emptyState('Keine Geräte gefunden', 'Passe die Filter an.') : `
     <div class="qr-grid" id="qr-grid">
       ${list.map(dv=>`
         <div class="qr-tile ${state.qrSelected.has(dv.id)?'selected':''}">
@@ -2177,11 +2208,11 @@ function renderQrCenter(){
           <div class="qt-name">${dv.name}</div>
         </div>
       `).join('')}
-    </div>
+    </div>`}
   `;
 }
 function toggleQrSelect(id){ if(state.qrSelected.has(id)) state.qrSelected.delete(id); else state.qrSelected.add(id); render(); }
-function qrSelectAll(){ DEVICES.forEach(dv=>state.qrSelected.add(dv.id)); render(); }
+function qrSelectAll(){ filteredQrDevices().forEach(dv=>state.qrSelected.add(dv.id)); render(); }
 function qrSelectNone(){ state.qrSelected.clear(); render(); }
 
 /* ---- Fertige Etikettenbilder (PNG) als ZIP — direkt in DYMO Connect als Bild einfügbar ---- */
@@ -2244,7 +2275,7 @@ function renderDeviceLabelPng(dv){
 }
 async function exportDymoImages(){
   if(!window.JSZip){ showToast('ZIP-Bibliothek nicht verfügbar.'); return; }
-  const ids = state.qrSelected.size>0 ? Array.from(state.qrSelected) : DEVICES.map(d=>d.id);
+  const ids = state.qrSelected.size>0 ? Array.from(state.qrSelected) : filteredQrDevices().map(d=>d.id);
   showToast('Erzeuge '+ids.length+' Etikettenbild(er)…');
   const zip = new JSZip();
   let ok = 0, failed = 0;
@@ -2266,7 +2297,7 @@ async function exportDymoImages(){
   showToast(ok+' Etikettenbild(er) als ZIP exportiert'+(failed?' ('+failed+' fehlgeschlagen)':'')+'.');
 }
 function exportDymoCsv(){
-  const ids = state.qrSelected.size>0 ? Array.from(state.qrSelected) : DEVICES.map(d=>d.id);
+  const ids = state.qrSelected.size>0 ? Array.from(state.qrSelected) : filteredQrDevices().map(d=>d.id);
   const rows = [['Inventar-ID','Gerät','Typ','Marke','Modell','Benutzer','QR-Inhalt (Link)']];
   ids.forEach(id=>{
     const dv = deviceById(id); if(!dv) return;
