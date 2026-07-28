@@ -177,6 +177,8 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 }
 .icon-btn:hover{background:var(--gray-50); color:var(--text);}
 .icon-btn svg{width:19px; height:19px;}
+.icon-btn.spin svg{animation:spin .8s linear infinite;}
+@keyframes spin{ from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
 
 .search-box{flex:1; max-width:420px; position:relative;}
 .search-box input{
@@ -478,8 +480,8 @@ table.data-table{width:100%; border-collapse:collapse; font-size:13px;}
 .label-text .lt-id{font-family:'Cascadia Code', Consolas, monospace; font-weight:800; font-size:11px;}
 .label-text .lt-name{font-size:9px; color:#444; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 </style>
-<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js" onerror="window.__firebaseLoadFailed=true"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js" onerror="window.__firebaseLoadFailed=true"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js" defer onerror="window.__firebaseLoadFailed=true"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js" defer onerror="window.__firebaseLoadFailed=true"></script>
 </head>
 <body>
 
@@ -503,8 +505,10 @@ const ICONS = {
   print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="1.5"/><path d="M6 14h12v7H6z"/></svg>',
   user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.3-4 4-6 7.5-6s6.2 2 7.5 6"/></svg>',
   swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0115.3-6.4M21 12a9 9 0 01-15.3 6.4"/><path d="M18 3v5h-5M6 21v-5h5"/></svg>',
   archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 002 2h10a2 2 0 002-2V9M10 13h4"/></svg>',
   chevronR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
+  chevronL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
   warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l10 18H2L12 2z"/><path d="M12 9v5M12 17v.01"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   laptop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="10" rx="1.2"/><path d="M2 18.5h20M9 18.5l.6-1.5h4.8l.6 1.5"/></svg>',
@@ -688,9 +692,10 @@ const SUPPLIERS = ["Bechtle","Cancom","Computacenter","Apple Business","Amazon B
 
 /* ---- Postpone-Zeiträume für die Austausch-Ampel ---- */
 const POSTPONE_OPTIONS = [
-  {months:2, label:'2 Monate'}, {months:4, label:'4 Monate'}, {months:6, label:'6 Monate'},
-  {months:8, label:'8 Monate'}, {months:10, label:'10 Monate'}, {months:12, label:'12 Monate (1 Jahr)'},
-  {months:24, label:'24 Monate (2 Jahre)'},
+  {months:1, label:'1 Monat'}, {months:2, label:'2 Monate'}, {months:3, label:'3 Monate'},
+  {months:4, label:'4 Monate'}, {months:6, label:'6 Monate'}, {months:8, label:'8 Monate'},
+  {months:10, label:'10 Monate'}, {months:12, label:'12 Monate (1 Jahr)'}, {months:18, label:'18 Monate (1,5 Jahre)'},
+  {months:24, label:'24 Monate (2 Jahre)'}, {months:36, label:'36 Monate (3 Jahre)'}, {months:48, label:'48 Monate (4 Jahre)'},
 ];
 
 /* ---- Rollenwechsel ----
@@ -742,12 +747,20 @@ let cloudStatusReason = 'Noch nicht verbunden…';
 function cloudConfigured(){
   return CLOUD_CONFIG.apiKey && CLOUD_CONFIG.apiKey.indexOf('DEIN-') !== 0;
 }
+let cloudInitAttempts = 0;
 function initCloud(){
   if(!cloudConfigured()){ cloudStatusReason = 'Cloud-Speicher ist nicht konfiguriert.'; render(); return; }
   if(typeof firebase === 'undefined'){
+    if(!window.__firebaseLoadFailed && cloudInitAttempts < 20){
+      // Bibliothek lädt im Hintergrund noch (nicht blockierend) — automatisch weiter versuchen, ohne die Seite zu blockieren
+      cloudInitAttempts++;
+      cloudStatusReason = 'Verbinde…';
+      setTimeout(initCloud, 250);
+      return;
+    }
     cloudStatusReason = window.__firebaseLoadFailed
       ? 'Die Firebase-Bibliothek konnte nicht geladen werden — vermutlich blockiert das Netzwerk (WLAN/Firewall) die Adresse gstatic.com. Versuch es über Mobilfunkdaten statt WLAN.'
-      : 'Die Firebase-Bibliothek wurde noch nicht geladen (Netzwerk sehr langsam?).';
+      : 'Die Firebase-Bibliothek konnte nicht rechtzeitig geladen werden (Netzwerk sehr langsam?).';
     render();
     return;
   }
@@ -756,12 +769,13 @@ function initCloud(){
     const db = firebase.firestore();
     cloudDocRef = db.collection(CLOUD_DOC_PATH.collection).doc(CLOUD_DOC_PATH.doc);
     cloudDocRef.onSnapshot(function(snap){
+      const wasEnabled = cloudEnabled;
       cloudEnabled = true;
       cloudStatusReason = 'Verbunden.';
-      if(!snap.exists) { render(); return; }
+      if(!snap.exists) { if(!wasEnabled) render(); return; }
       const data = snap.data();
       const incoming = JSON.stringify(data);
-      if(incoming === lastAppliedSnapshot) { render(); return; } // eigene Änderung, kein erneutes Anwenden nötig
+      if(incoming === lastAppliedSnapshot) { if(!wasEnabled) render(); return; } // eigene Änderung — nichts Neues, kein Neuzeichnen nötig (verhindert offene Fenster/Dropdowns beim Tippen zu unterbrechen)
       lastAppliedSnapshot = incoming;
       lastLocalSnapshot = incoming; // verhindert, dass wir das gerade Empfangene gleich wieder zurückschreiben
       if(Array.isArray(data.users)) USERS = data.users;
@@ -785,9 +799,44 @@ function initCloud(){
   }
 }
 function retryCloudInit(){
+  cloudInitAttempts = 0;
   cloudStatusReason = 'Verbindungsversuch läuft…';
   render();
   setTimeout(initCloud, 50);
+}
+let refreshInProgress = false;
+function forceRefresh(){
+  if(refreshInProgress) return;
+  refreshInProgress = true;
+  render();
+  if(cloudEnabled && cloudDocRef){
+    cloudDocRef.get({source:'server'}).then(function(snap){
+      refreshInProgress = false;
+      if(snap.exists){
+        const data = snap.data();
+        const incoming = JSON.stringify(data);
+        lastAppliedSnapshot = incoming;
+        lastLocalSnapshot = incoming;
+        if(Array.isArray(data.users)) USERS = data.users;
+        if(Array.isArray(data.devices)) DEVICES = data.devices;
+        if(Array.isArray(data.licenses)) LICENSES = data.licenses;
+        if(Array.isArray(data.procurement)) PROCUREMENT = data.procurement;
+        if(data.categoryLists) CATEGORY_LISTS = data.categoryLists;
+      }
+      render();
+      showToast('Aktualisiert.');
+    }).catch(function(err){
+      refreshInProgress = false;
+      console.warn('Aktualisierung fehlgeschlagen', err);
+      render();
+      showToast('Aktualisierung fehlgeschlagen — zeige lokalen Stand.');
+    });
+  } else {
+    // Kein Cloud-Speicher aktiv: einfach die Ansicht (inkl. Filter/Sortierung) neu aufbauen
+    refreshInProgress = false;
+    render();
+    showToast('Aktualisiert.');
+  }
 }
 function pushToCloud(dataObj){
   if(!cloudEnabled || !cloudDocRef) return;
@@ -1032,6 +1081,7 @@ function renderTopbar(){
       ${state.searchOpen && results ? renderSearchResults(results) : ''}
     </div>
     <button class="finder-btn" onclick="openFinderModal()">${icon('qr')}<span class="fb-text">Gerät finden</span></button>
+    <button class="icon-btn ${refreshInProgress?'spin':''}" onclick="forceRefresh()" title="Aktualisieren">${icon('refresh')}</button>
     <div class="topbar-spacer"></div>
     <div class="topbar-right">
       <div class="user-chip" onclick="openRoleModal()">
@@ -1184,6 +1234,7 @@ function renderDevicesList(){
         ${CATEGORY_LISTS.deviceTypes.map(t=>`<option value="${t}" ${state.deviceFilter.type===t?'selected':''}>${t}</option>`).join('')}
       </select>
       <div style="flex:1"></div>
+      <button class="icon-btn ${refreshInProgress?'spin':''}" onclick="forceRefresh()" title="Aktualisieren">${icon('refresh')}</button>
       <div class="view-toggle">
         <button class="${state.deviceViewMode==='table'?'active':''}" onclick="state.deviceViewMode='table'; render();" title="Tabelle">${icon('tableView')}</button>
         <button class="${state.deviceViewMode==='card'?'active':''}" onclick="state.deviceViewMode='card'; render();" title="Karten">${icon('gridView')}</button>
@@ -1260,6 +1311,7 @@ function renderDeviceDetail(id){
   const a = ampelForDevice(dv);
 
   return `
+    ${backButton('backToDevices')}
     <div class="breadcrumb"><span class="bc-link" onclick="backToDevices()">Geräte</span> <span>${icon('chevronR')}</span> <span>${dv.id}</span></div>
     <div class="card card-pad">
       <div class="detail-hero">
@@ -1340,6 +1392,9 @@ function renderDeviceDetail(id){
 }
 function field(label, value){
   return `<div class="fl-item"><div class="field-label">${label}</div><div class="field-value">${value}</div></div>`;
+}
+function backButton(fnName, label){
+  return `<button class="btn btn-sm btn-ghost" style="margin-bottom:10px; padding-left:6px; color:var(--text-secondary);" onclick="${fnName}()">${icon('chevronL')} ${label||'Zurück'}</button>`;
 }
 
 /* ---- QR-Rendering (SVG, komplett offline via eingebettete Bibliothek) ---- */
@@ -1431,12 +1486,21 @@ function confirmRetire(id){
 function openPostponeModal(id){ state.modal={type:'postpone', payload:{id}}; render(); }
 function confirmPostpone(id){
   const dv = deviceById(id);
-  const months = parseInt(document.getElementById('postpone-months').value, 10);
-  const base = dv.replacementPlanned || addYears(dv.issuedDate, 4);
-  const newDate = addMonths(base, months);
+  const fixedInput = document.getElementById('postpone-fixed-date');
+  const fixedDate = fixedInput && fixedInput.value ? fixedInput.value : null;
+  let newDate, note;
+  if(fixedDate){
+    newDate = fixedDate;
+    note = 'Auf festes Datum gesetzt: '+fmtDate(newDate);
+  } else {
+    const months = parseInt(document.getElementById('postpone-months').value, 10);
+    const base = dv.replacementPlanned || addYears(dv.issuedDate, 4);
+    newDate = addMonths(base, months);
+    note = 'Um '+months+' Monate verschoben — neues Datum: '+fmtDate(newDate);
+  }
   dv.replacementPlanned = newDate;
   dv.replacementManuallyAdjusted = true;
-  dv.history.push({date:'2026-07-27', event:'Austausch verschoben', note:'Um '+months+' Monate verschoben — neues Datum: '+fmtDate(newDate)});
+  dv.history.push({date:'2026-07-27', event:'Austausch verschoben', note});
   closeModal();
   showToast('Austausch wurde auf '+fmtDate(newDate)+' verschoben.');
   render();
@@ -1492,6 +1556,8 @@ function renderUsersList(){
         <option value="alle" ${f.status==='alle'?'selected':''}>Alle Status</option>
         ${CATEGORY_LISTS.userStatus.map(s=>`<option value="${s}" ${f.status===s?'selected':''}>${s}</option>`).join('')}
       </select>
+      <div style="flex:1"></div>
+      <button class="icon-btn ${refreshInProgress?'spin':''}" onclick="forceRefresh()" title="Aktualisieren">${icon('refresh')}</button>
     </div>
     ${list.length===0 ? emptyState('Keine Mitarbeitenden gefunden','Passe die Filter an oder setze die Suche zurück.') : `
     <div class="card"><div class="table-wrap"><table class="data-table">
@@ -1525,6 +1591,7 @@ function renderUserDetail(id){
   const devs = devicesForUser(id);
   const licenseNames = (u.assignedLicensesRaw||'').split(',').map(s=>s.trim()).filter(Boolean);
   return `
+    ${backButton('backToUsers')}
     <div class="breadcrumb"><span class="bc-link" onclick="backToUsers()">Mitarbeitende</span> <span>${icon('chevronR')}</span> <span>${u.name}</span></div>
     <div class="card card-pad">
       <div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap;">
@@ -1686,6 +1753,8 @@ function renderLicenses(){
         <option value="alle" ${f.status==='alle'?'selected':''}>Alle Status</option>
         ${CATEGORY_LISTS.licenseStatus.map(s=>`<option value="${s}" ${f.status===s?'selected':''}>${s}</option>`).join('')}
       </select>
+      <div style="flex:1"></div>
+      <button class="icon-btn ${refreshInProgress?'spin':''}" onclick="forceRefresh()" title="Aktualisieren">${icon('refresh')}</button>
     </div>
     ${list.length===0 ? emptyState('Keine Lizenzen gefunden','Passe den Filter an.') : `
     <div class="card"><div class="table-wrap"><table class="data-table">
@@ -1804,6 +1873,7 @@ function renderProcurement(){
     <div class="page-header">
       <div><div class="page-title">Beschaffungsrichtlinie</div><div class="page-sub">Budgetrichtwerte und empfohlene Gerätemodelle je Kategorie — kein Inventar, sondern Richtwerte für Neubeschaffungen</div></div>
       <div class="page-actions">
+        <button class="icon-btn ${refreshInProgress?'spin':''}" onclick="forceRefresh()" title="Aktualisieren">${icon('refresh')}</button>
         ${canEdit() ? `<button class="btn btn-primary" onclick="openProcurementEditModal(null)">${icon('plus')} Neue Richtlinie</button>` : ''}
       </div>
     </div>
@@ -1906,8 +1976,12 @@ function renderQrCenter(){
   return `
     <div class="page-header">
       <div><div class="page-title">QR-Code-Center</div><div class="page-sub">Jeder Datensatz besitzt einen dauerhaft gültigen QR-Code, der direkt auf die Gerätedetailseite verweist.</div></div>
-      <div class="page-actions"><button class="btn btn-primary" onclick="openFinderModal()">${icon('qr')} Gerät finden</button></div>
+      <div class="page-actions">
+        <button class="icon-btn ${refreshInProgress?'spin':''}" onclick="forceRefresh()" title="Aktualisieren">${icon('refresh')}</button>
+        <button class="btn btn-primary" onclick="openFinderModal()">${icon('qr')} Gerät finden</button>
+      </div>
     </div>
+    <div class="notice">${icon('info')}<div>Der Browser-Druck erzeugt ein normales Druckdokument (über den PDF-Drucker oder — falls installiert — direkt über einen echten DYMO-LabelWriter-Druckertreiber). Für den nativen DYMO-Connect-Workflow (Serienetiketten mit QR-Feld) nutze stattdessen den CSV-Export unten.</div></div>
     <div class="qr-toolbar">
       <button class="btn btn-sm" onclick="qrSelectAll()">Alle auswählen</button>
       <button class="btn btn-sm" onclick="qrSelectNone()">Auswahl aufheben</button>
@@ -1922,6 +1996,7 @@ function renderQrCenter(){
       <div class="cell-muted">${state.qrSelected.size} ausgewählt</div>
       <button class="btn" onclick="printSelectedQrPreview()">${icon('print')} Druckvorschau</button>
       <button class="btn btn-primary" onclick="printSelectedLabels()">${icon('print')} Ausgewählte drucken</button>
+      <button class="btn" onclick="exportDymoCsv()">${icon('archive')} CSV für DYMO Connect</button>
     </div>
     <div class="qr-grid" id="qr-grid">
       ${list.map(dv=>`
@@ -1938,6 +2013,25 @@ function renderQrCenter(){
 function toggleQrSelect(id){ if(state.qrSelected.has(id)) state.qrSelected.delete(id); else state.qrSelected.add(id); render(); }
 function qrSelectAll(){ DEVICES.forEach(dv=>state.qrSelected.add(dv.id)); render(); }
 function qrSelectNone(){ state.qrSelected.clear(); render(); }
+function exportDymoCsv(){
+  const ids = state.qrSelected.size>0 ? Array.from(state.qrSelected) : DEVICES.map(d=>d.id);
+  const rows = [['Inventar-ID','Gerät','Typ','Marke','Modell','Benutzer','QR-Inhalt (Link)']];
+  ids.forEach(id=>{
+    const dv = deviceById(id); if(!dv) return;
+    rows.push([dv.id, dv.name, dv.type, dv.brand, dv.model, dv.userName||'', deviceQrText(dv.id)]);
+  });
+  const csv = rows.map(r=>r.map(cell=>{
+    const s = String(cell==null?'':cell);
+    return /[",;\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(';')).join('\r\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'tepm-geraete-dymo-export.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(ids.length+' Gerät(e) als CSV exportiert.');
+}
 function paintQrGrid(){
   document.querySelectorAll('.qr-canvas-holder').forEach(holder=>{
     const id = holder.getAttribute('data-id');
@@ -2280,12 +2374,17 @@ function postponeModal(id){
     <div class="modal-body">
       <div class="cell-muted" style="margin-bottom:14px;">Aktuell vorgesehen: <strong>${fmtDate(current)}</strong></div>
       <div class="form-field">
-        <label>Um wie viel verschieben?</label>
-        <select id="postpone-months">
+        <label>Um einen Zeitraum verschieben</label>
+        <select id="postpone-months" onchange="document.getElementById('postpone-fixed-date').value='';">
           ${POSTPONE_OPTIONS.map(o=>`<option value="${o.months}">${o.label}</option>`).join('')}
         </select>
       </div>
-      <div class="cell-muted" style="margin-top:10px; font-size:12px;">Das neue Datum wird ausgehend vom aktuell vorgesehenen Austauschdatum berechnet und in der Gerätehistorie vermerkt.</div>
+      <div class="cell-muted" style="margin:16px 0; text-align:center; font-weight:700; letter-spacing:.03em; font-size:11px; text-transform:uppercase;">— oder —</div>
+      <div class="form-field">
+        <label>Festes Datum wählen</label>
+        <input type="date" id="postpone-fixed-date">
+      </div>
+      <div class="cell-muted" style="margin-top:10px; font-size:12px;">Wird ein festes Datum gewählt, hat es Vorrang vor dem Zeitraum oben. Auf iPad/iPhone öffnet das Datumsfeld ein Auswahlrad. Die Änderung wird in der Gerätehistorie vermerkt.</div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">Abbrechen</button>
