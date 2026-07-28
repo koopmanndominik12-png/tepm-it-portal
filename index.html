@@ -59,6 +59,7 @@ Minimum version required to store current data is: `+i+`.
 
   --green-50:#EAF7EE;
   --green-600:#1E8A45;
+  --green-700:#166636;
   --amber-50:#FFF6E4;
   --amber-600:#B87400;
   --orange-50:#FFEEE5;
@@ -67,6 +68,23 @@ Minimum version required to store current data is: `+i+`.
   --red-600:#C42B2B;
   --gray-50:#F1F2F4;
   --gray-600:#6B7280;
+
+  /* Dezente Akzentfarben je Bereich — pastellig, nicht grell */
+  --teal-50:#E5F6F5;
+  --teal-600:#0D7C74;
+  --teal-700:#0A625B;
+  --violet-50:#F0ECFB;
+  --violet-600:#6D3FCF;
+  --violet-700:#5931A8;
+  --gold-50:#FBF1DC;
+  --gold-600:#A8790C;
+  --gold-700:#87600A;
+  --rose-50:#FBEAF0;
+  --rose-600:#B5296B;
+  --rose-700:#8E2055;
+  --slate-50:#EEF1F5;
+  --slate-600:#4B5768;
+  --slate-700:#374151;
 
   --radius-sm:6px;
   --radius:10px;
@@ -145,8 +163,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 }
 .nav-item svg{flex-shrink:0; width:19px; height:19px;}
 .nav-item:hover{background:var(--gray-50); color:var(--text);}
-.nav-item.active{background:var(--blue-50); color:var(--blue-700);}
-.nav-item.active svg{color:var(--blue-600);}
+.nav-item.active{font-weight:700;}
 .sidebar.collapsed .nav-text, .sidebar.collapsed .brand-text, .sidebar.collapsed .brand-sub{display:none;}
 .sidebar.collapsed .nav-item{justify-content:center;}
 .sidebar.collapsed .sidebar-brand{justify-content:center; padding:0;}
@@ -410,7 +427,7 @@ table.data-table{width:100%; border-collapse:collapse; font-size:13px;}
 .qr-toolbar{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;}
 .qr-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:14px;}
 .qr-tile{background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:14px; text-align:center; position:relative;}
-.qr-tile.selected{border-color:var(--blue-500); box-shadow:0 0 0 2px var(--blue-100);}
+.qr-tile.selected{border-color:var(--rose-600); box-shadow:0 0 0 2px var(--rose-50);}
 .qr-tile .qr-tile-chk{position:absolute; top:10px; left:10px;}
 .qr-tile canvas, .qr-tile img, .qr-tile svg{width:96px; height:96px; margin:6px auto;}
 .qr-canvas-holder{width:96px; height:96px; margin:6px auto;}
@@ -568,7 +585,8 @@ function deviceTypeIcon(type){
    DATA — importiert aus den TePm-Exportdateien
    (IT-Geräte.xlsx, Mitarbeitende.xlsx, Lizenzen.xlsx, Beschaffungsrichtlinie.xlsx)
    ========================================================= */
-const TODAY = new Date('2026-07-27');
+const TODAY = new Date();
+function todayStr(){ return new Date().toISOString().slice(0,10); }
 function fmtDate(str){ if(!str) return '—'; const dt=new Date(str); if(isNaN(dt)) return '—'; return dt.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'}); }
 function fmtMoney(n){ if(n==null || n==='' || isNaN(n)) return '—'; return Number(n).toLocaleString('de-DE',{style:'currency',currency:'EUR'}); }
 function addYears(dateStr, years){ const dt=new Date(dateStr); dt.setFullYear(dt.getFullYear()+years); return dt.toISOString().slice(0,10); }
@@ -662,7 +680,8 @@ let DEVICES = RAW_DEVICES.map((r, i)=>{
     warrantyUntil: r.Garantie || null,
     supplier: r.Lieferant || null,
     price: r.Kaufpreis || null,
-    comment: r.Kommentar || null,
+    comments: r.Kommentar ? [{date: r.Ausgegeben || r.Bestellt || todayStr(), text: r.Kommentar}] : [],
+    noReplacementNeeded: false,
     returnedDate: null,
     replacementPlanned: r.Ausgegeben ? addYears(r.Ausgegeben, 4) : null,
     replacementDone: null,
@@ -921,12 +940,20 @@ setTimeout(initCloud, 0);
    HELPERS — Ampel / KPIs
    ========================================================= */
 function ampelForDevice(dev){
+  if(dev.noReplacementNeeded){
+    return {level:'none', label:'Kein Austausch mehr nötig', dot:'dot-gray', badge:'badge-gray', suppressed:true};
+  }
+  if(dev.status==='Ausgemustert' || dev.status==='Entsorgt'){
+    return {level:'retired', label:'Kein Austausch (Gerät ausgemustert)', dot:'dot-gray', badge:'badge-gray', suppressed:true};
+  }
   if(!dev.issuedDate || !dev.replacementPlanned) return {level:'gray', label:'Kein Ausgabedatum', dot:'dot-gray', badge:'badge-gray'};
   const days = daysUntil(dev.replacementPlanned);
-  if(days < 0) return {level:'red', label:'Überfällig', dot:'dot-red', badge:'badge-red'};
-  if(days <= 90) return {level:'orange', label:'Innerhalb 90 Tagen', dot:'dot-orange', badge:'badge-orange'};
-  if(days <= 365) return {level:'amber', label:'Innerhalb 12 Monaten', dot:'dot-amber', badge:'badge-amber'};
-  return {level:'green', label:'Mehr als 12 Monate', dot:'dot-green', badge:'badge-green'};
+  // Austausch ist grundsätzlich erst AB Erreichen von 4 Jahren zulässig (bzw. dem manuell
+  // verschobenen Datum) — die Farbstufen darunter sind reine Vorankündigungen, kein "darf schon".
+  if(days <= 0) return {level:'red', label:'Austausch ab jetzt zulässig', dot:'dot-red', badge:'badge-red'};
+  if(days <= 90) return {level:'orange', label:'Austausch in unter 90 Tagen zulässig', dot:'dot-orange', badge:'badge-orange'};
+  if(days <= 365) return {level:'amber', label:'Austausch in unter 12 Monaten zulässig', dot:'dot-amber', badge:'badge-amber'};
+  return {level:'green', label:'Austausch noch nicht zulässig (>12 Monate)', dot:'dot-green', badge:'badge-green'};
 }
 function statusBadgeClass(status){
   const map = {'Im Einsatz':'badge-blue','Im Lager':'badge-gray','Bestellt':'badge-gray','Geliefert':'badge-gray','Ersatzgerät':'badge-blue','Reparatur':'badge-amber','Defekt':'badge-red','Verloren':'badge-red','Ausgemustert':'badge-gray','Entsorgt':'badge-gray'};
@@ -939,6 +966,12 @@ function userStatusBadge(status){
 function userById(id){ return USERS.find(u=>u.id===id); }
 function deviceById(id){ return DEVICES.find(dv=>dv.id===id); }
 function devicesForUser(userId){ return DEVICES.filter(dv=>dv.userId===userId); }
+function sortedAlpha(arr){ return [...arr].sort((a,b)=> String(a).localeCompare(String(b), 'de', {sensitivity:'base'})); }
+function sortedByName(list, key){ key = key || 'name'; return [...list].sort((a,b)=> String(a[key]).localeCompare(String(b[key]), 'de', {sensitivity:'base'})); }
+function pageIconBadge(view, iconName){
+  const color = SECTION_COLORS[view] || 'blue';
+  return `<div style="width:42px; height:42px; border-radius:12px; background:var(--${color}-50); color:var(--${color}-600); display:flex; align-items:center; justify-content:center; flex-shrink:0;">${icon(iconName)}</div>`;
+}
 
 /* ---- Generisches Sortieren für Tabellen ---- */
 function toggleSort(view, key){
@@ -975,6 +1008,7 @@ function applySort(list, view, accessor){
    ========================================================= */
 const state = {
   view: 'dashboard',
+  navHistory: [],
   role: 'IT-Administrator',
   sidebarCollapsed: false,
   mobileSidebarOpen: false,
@@ -1039,8 +1073,17 @@ function render(){
   attachGlobalHandlers();
 }
 
+/* Jeder Bereich bekommt eine eigene dezente Akzentfarbe — zieht sich durch
+   Navigation, Kennzahlen und Icons, damit sich die Bereiche auf den ersten
+   Blick unterscheiden, ohne grell zu wirken. */
+const SECTION_COLORS = {
+  dashboard:'blue', devices:'teal', users:'violet', licenses:'gold',
+  procurement:'green', qr:'rose', settings:'slate',
+};
 function navItem(view, label, iconName){
-  return `<li class="nav-item ${state.view===view?'active':''}" onclick="goTo('${view}')">${icon(iconName)}<span class="nav-text">${label}</span></li>`;
+  const active = state.view===view;
+  const color = SECTION_COLORS[view] || 'blue';
+  return `<li class="nav-item ${active?'active':''}" style="${active?`background:var(--${color}-50); color:var(--${color}-700);`:''}" onclick="goTo('${view}')"><span style="${active?`color:var(--${color}-600);`:''} display:inline-flex;">${icon(iconName)}</span><span class="nav-text">${label}</span></li>`;
 }
 
 function renderSidebar(){
@@ -1163,23 +1206,26 @@ function renderDashboard(){
   const noWarranty = DEVICES.filter(dv=> !dv.warrantyUntil);
 
   const kpis = [
-    {label:'Geräte gesamt', value:total, icon:'devices', color:'blue', onClick:"setDeviceFilter('alle','alle')"},
+    {label:'Geräte gesamt', value:total, icon:'devices', color:'teal', onClick:"setDeviceFilter('alle','alle')"},
     {label:'Geräte im Einsatz', value:inUse, icon:'check', color:'green', onClick:"setDeviceFilter('Im Einsatz','alle')"},
-    {label:'Geräte im Lager', value:inStock, icon:'archive', color:'gray', onClick:"setDeviceFilter('Im Lager','alle')"},
+    {label:'Geräte im Lager', value:inStock, icon:'archive', color:'slate', onClick:"setDeviceFilter('Im Lager','alle')"},
     {label:'Geräte in Reparatur', value:inRepair, icon:'warn', color:'amber', onClick:"setDeviceFilter('Reparatur','alle')"},
     {label:'Austausch bevorstehend', value:soon, icon:'warn', color:'orange', onClick:"goTo('devices')"},
     {label:'Austausch überfällig', value:overdue, icon:'warn', color:'red', onClick:"goTo('devices')"},
-    {label:'Mitarbeitende', value:employees, icon:'users', color:'blue', onClick:"goTo('users')"},
-    {label:'Lizenzen gekauft', value:licPurchased, icon:'licenses', color:'blue', onClick:"goTo('licenses')"},
+    {label:'Mitarbeitende', value:employees, icon:'users', color:'violet', onClick:"goTo('users')"},
+    {label:'Lizenzen gekauft', value:licPurchased, icon:'licenses', color:'gold', onClick:"goTo('licenses')"},
     {label:'Lizenzen zugewiesen', value:licAssigned, icon:'licenses', color:'green', onClick:"goTo('licenses')"},
   ];
 
   return `
     <div class="page-header">
-      <div>
+      <div style="display:flex; gap:14px; align-items:center;">
+        ${pageIconBadge('dashboard','dashboard')}
+        <div>
         <div class="page-title">Dashboard</div>
-        <div class="page-sub">Überblick über den aktuellen Status der internen IT — Stand ${fmtDate('2026-07-27')}</div>
+        <div class="page-sub">Überblick über den aktuellen Status der internen IT — Stand ${fmtDate(todayStr())}</div>
       </div>
+    </div>
     </div>
     <div class="grid kpi-grid">
       ${kpis.map(k=>`
@@ -1242,7 +1288,9 @@ function renderDevicesList(){
   const list = filteredDevices();
   return `
     <div class="page-header">
+      <div style="display:flex; gap:14px; align-items:center;">${pageIconBadge('devices','devices')}
       <div><div class="page-title">Geräteverwaltung</div><div class="page-sub">${DEVICES.length} Geräte im Bestand</div></div>
+      </div>
       <div class="page-actions">
         ${canEdit() ? `<button class="btn btn-primary" onclick="openDeviceEditModal(null)">${icon('plus')} Neues Gerät</button>` : ''}
       </div>
@@ -1252,11 +1300,11 @@ function renderDevicesList(){
       <input class="filter-select" style="min-width:220px" type="text" placeholder="Suchen nach ID, Modell, Benutzer…" value="${escapeAttr(state.deviceFilter.query)}" oninput="state.deviceFilter.query=this.value; render();">
       <select class="filter-select" onchange="state.deviceFilter.status=this.value; render();">
         <option value="alle" ${state.deviceFilter.status==='alle'?'selected':''}>Alle Status</option>
-        ${CATEGORY_LISTS.deviceStatus.map(s=>`<option value="${s}" ${state.deviceFilter.status===s?'selected':''}>${s}</option>`).join('')}
+        ${sortedAlpha(CATEGORY_LISTS.deviceStatus).map(s=>`<option value="${s}" ${state.deviceFilter.status===s?'selected':''}>${s}</option>`).join('')}
       </select>
       <select class="filter-select" onchange="state.deviceFilter.type=this.value; render();">
         <option value="alle" ${state.deviceFilter.type==='alle'?'selected':''}>Alle Gerätetypen</option>
-        ${CATEGORY_LISTS.deviceTypes.map(t=>`<option value="${t}" ${state.deviceFilter.type===t?'selected':''}>${t}</option>`).join('')}
+        ${sortedAlpha(CATEGORY_LISTS.deviceTypes).map(t=>`<option value="${t}" ${state.deviceFilter.type===t?'selected':''}>${t}</option>`).join('')}
       </select>
       <div style="flex:1"></div>
       <button class="icon-btn ${refreshInProgress?'spin':''}" onclick="forceRefresh()" title="Aktualisieren">${icon('refresh')}</button>
@@ -1291,8 +1339,8 @@ function renderDevicesTable(list){
           <td data-label="Benutzer">${dv.userName || '<span class="cell-muted">— nicht zugewiesen —</span>'}</td>
           <td data-label="Ausgegeben am" class="cell-muted">${fmtDate(dv.issuedDate)}</td>
           <td data-label="Austausch">
-            <span class="dot ${a.dot}"></span> <span class="cell-muted">${dv.replacementPlanned ? fmtDate(dv.replacementPlanned) : a.label}</span>
-            ${canEdit() && dv.replacementPlanned ? `<button class="icon-btn" style="width:26px; height:26px; display:inline-flex; vertical-align:middle;" title="Austausch verschieben" onclick="event.stopPropagation(); openPostponeModal('${dv.id}')">${icon('clock')}</button>` : ''}
+            <span class="dot ${a.dot}"></span> <span class="cell-muted">${a.suppressed ? a.label : (dv.replacementPlanned ? fmtDate(dv.replacementPlanned) : a.label)}</span>
+            ${canEdit() && dv.replacementPlanned && !a.suppressed ? `<button class="icon-btn" style="width:26px; height:26px; display:inline-flex; vertical-align:middle;" title="Austausch verschieben" onclick="event.stopPropagation(); openPostponeModal('${dv.id}')">${icon('clock')}</button>` : ''}
           </td>
         </tr>`;
       }).join('')}
@@ -1305,7 +1353,7 @@ function renderDevicesCards(list){
       const a = ampelForDevice(dv);
       return `<div class="list-card" style="flex-direction:column; align-items:stretch;" onclick="openDevice('${dv.id}')">
         <div style="display:flex; align-items:center; gap:12px;">
-          <div class="list-card-icon">${deviceTypeIcon(dv.type)}</div>
+          <div class="list-card-icon" style="background:var(--teal-50); color:var(--teal-700);">${deviceTypeIcon(dv.type)}</div>
           <div class="list-card-body">
             <div class="list-card-title">${dv.name}</div>
             <div class="list-card-sub id-mono">${dv.id}</div>
@@ -1327,7 +1375,7 @@ function emptyState(title, sub){
 /* =========================================================
    GERÄTE — DETAIL
    ========================================================= */
-function openDevice(id){ closeModal(); state.view='devices'; state.currentDeviceId=id; state.searchOpen=false; state.searchQuery=''; render(); window.scrollTo(0,0); }
+function openDevice(id){ pushNavHistory(); closeModal(); state.view='devices'; state.currentDeviceId=id; state.searchOpen=false; state.searchQuery=''; render(); window.scrollTo(0,0); }
 function backToDevices(){ state.currentDeviceId=null; render(); }
 
 function renderDeviceDetail(id){
@@ -1336,7 +1384,7 @@ function renderDeviceDetail(id){
   const a = ampelForDevice(dv);
 
   return `
-    ${backButton('backToDevices')}
+    ${backButton('goBack')}
     <div class="breadcrumb"><span class="bc-link" onclick="backToDevices()">Geräte</span> <span>${icon('chevronR')}</span> <span>${dv.id}</span></div>
     <div class="card card-pad">
       <div class="detail-hero">
@@ -1355,10 +1403,12 @@ function renderDeviceDetail(id){
             <button class="btn btn-sm" onclick="openQrModal('${dv.id}')">${icon('qr')} QR-Code anzeigen</button>
             <button class="btn btn-sm" onclick="printSingleQr('${dv.id}')">${icon('print')} QR-Code drucken</button>
             <button class="btn btn-sm" onclick="printSingleLabel('${dv.id}')">${icon('print')} Inventaretikett drucken</button>
-            ${canEdit() && dv.replacementPlanned ? `<button class="btn btn-sm" onclick="openPostponeModal('${dv.id}')">${icon('clock')} Austausch verschieben</button>` : ''}
-            ${canEdit() && dv.replacementManuallyAdjusted ? `<button class="btn btn-sm btn-ghost" onclick="resetPostpone('${dv.id}')">Verschiebung zurücksetzen</button>` : ''}
+            ${canEdit() && dv.replacementPlanned && !a.suppressed ? `<button class="btn btn-sm" onclick="openPostponeModal('${dv.id}')">${icon('clock')} Austausch verschieben</button>` : ''}
+            ${canEdit() && dv.replacementManuallyAdjusted && !a.suppressed ? `<button class="btn btn-sm btn-ghost" onclick="resetPostpone('${dv.id}')">Verschiebung zurücksetzen</button>` : ''}
+            ${canEdit() && dv.status!=='Ausgemustert' && dv.status!=='Entsorgt' ? `<button class="btn btn-sm ${dv.noReplacementNeeded?'':''}" onclick="toggleNoReplacementNeeded('${dv.id}')">${icon('close')} ${dv.noReplacementNeeded? 'Austauschplanung reaktivieren' : 'Kein Austausch mehr nötig'}</button>` : ''}
             ${canEdit() ? `<button class="btn btn-sm" onclick="openReassignModal('${dv.id}')">${icon('swap')} Gerät neu zuweisen</button>` : ''}
             ${canEdit() ? `<button class="btn btn-sm btn-danger" onclick="openRetireModal('${dv.id}')">${icon('archive')} Gerät ausmustern</button>` : ''}
+            ${isAdmin() ? `<button class="btn btn-sm btn-danger" onclick="openDeviceDeleteModal('${dv.id}')">${icon('trash')} Gerät endgültig löschen</button>` : ''}
           </div>
         </div>
         <div class="qr-mini" onclick="openQrModal('${dv.id}')" id="qr-hero-holder" title="QR-Code anzeigen"></div>
@@ -1392,12 +1442,32 @@ function renderDeviceDetail(id){
         <div class="card-pad field-list">
           ${field('Ausgegeben am', dv.issuedDate ? fmtDate(dv.issuedDate) : '—')}
           ${field('Rückgegeben am', dv.returnedDate ? fmtDate(dv.returnedDate) : '—')}
-          ${field('Austausch vorgesehen', dv.replacementPlanned ? fmtDate(dv.replacementPlanned)+(dv.replacementManuallyAdjusted? ' <span class="badge badge-blue" style="margin-left:4px;">manuell verschoben</span>' : ' (Ausgabedatum + 4 Jahre)') : '—')}
+          ${field('Austausch vorgesehen', a.suppressed ? `<span class="badge ${a.badge}">${a.label}</span>` : (dv.replacementPlanned ? fmtDate(dv.replacementPlanned)+(dv.replacementManuallyAdjusted? ' <span class="badge badge-blue" style="margin-left:4px;">manuell verschoben</span>' : ' (Ausgabedatum + 4 Jahre)') : '—'))}
           ${field('Austausch erfolgt', dv.replacementDone ? fmtDate(dv.replacementDone) : '—')}
           ${field('Status-Ampel', `<span class="badge ${a.badge}"><span class="dot ${a.dot}"></span> ${a.label}</span>`)}
         </div>
       </div>
-      ${dv.comment ? `<div class="card" style="grid-column:1/-1;"><div class="card-header"><h3>Kommentar</h3></div><div class="card-pad">${escapeHtml(dv.comment)}</div></div>` : ''}
+      <div class="card" style="grid-column:1/-1;">
+        <div class="card-header"><h3>Kommentare</h3></div>
+        <div class="card-pad">
+          ${canEdit() ? `<div class="form-field">
+            <label>Neuen Kommentar hinzufügen</label>
+            <textarea id="quick-comment-input" placeholder="z. B. Auffälligkeiten, Rückmeldungen, Reparaturhinweise …"></textarea>
+          </div>
+          <button class="btn btn-sm btn-primary" style="margin-top:10px;" onclick="addDeviceComment('${dv.id}')">${icon('plus')} Kommentar speichern</button>` : ''}
+          <div style="margin-top:${canEdit()?'18px':'0'};">
+            ${(!dv.comments || dv.comments.length===0) ? `<div class="cell-muted" style="font-size:13px;">Noch keine Kommentare vorhanden.</div>` : `
+            <ul class="timeline" style="padding:4px 4px 0;">
+              ${dv.comments.map(c=>`
+                <li class="tl-item">
+                  <div class="tl-dot"></div>
+                  <div class="tl-date">${fmtDate(c.date)}</div>
+                  <div class="tl-note" style="margin-top:2px;">${escapeHtml(c.text)}</div>
+                </li>`).join('')}
+            </ul>`}
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="section-title">Gerätehistorie</div>
@@ -1447,6 +1517,12 @@ function paintDeviceQr(){
 
 /* ---- Device edit modal ---- */
 function openDeviceEditModal(id){ state.modal = {type:'device-edit', payload:{id}}; render(); }
+function nextDeviceId(){
+  const used = new Set(DEVICES.map(d=>parseInt(d.id.split('-')[2],10)));
+  let n = 1;
+  while(used.has(n)) n++;
+  return 'TEPM-IT-'+String(n).padStart(6,'0');
+}
 function saveDeviceEdit(id){
   const g = key=>document.getElementById('de-'+key);
   const isNew = !id;
@@ -1456,10 +1532,8 @@ function saveDeviceEdit(id){
   const userIdVal = g('user').value;
   const usr = userIdVal ? userById(userIdVal) : null;
   if(isNew){
-    let maxNum = 0;
-    DEVICES.forEach(d=>{ const n=parseInt(d.id.split('-')[2]); if(n>maxNum) maxNum=n; });
-    const newId = 'TEPM-IT-'+String(maxNum+1).padStart(6,'0');
-    dv = {id:newId, history:[{date:'2026-07-27', event:'inventarisiert', note:'Gerät angelegt'}]};
+    const newId = nextDeviceId();
+    dv = {id:newId, comments:[], history:[{date:todayStr(), event:'inventarisiert', note:'Gerät angelegt'}]};
     DEVICES.push(dv);
   }
   dv.type = type; dv.brand=g('brand').value; dv.model=g('model').value;
@@ -1473,7 +1547,8 @@ function saveDeviceEdit(id){
   dv.deliveryDate=g('deliveryDate').value||null;
   dv.issuedDate=g('issuedDate').value||null;
   dv.replacementPlanned = dv.issuedDate ? addYears(dv.issuedDate,4) : null;
-  dv.comment=g('comment').value || null;
+  const newComment = (g('comment').value || '').trim();
+  if(newComment){ dv.comments = dv.comments || []; dv.comments.unshift({date: todayStr(), text: newComment}); }
   closeModal();
   showToast(isNew? 'Gerät wurde angelegt.' : 'Änderungen wurden gespeichert.');
   state.view='devices'; state.currentDeviceId=dv.id;
@@ -1490,7 +1565,7 @@ function saveReassign(id){
   dv.userId = newUser ? newUser.id : null;
   dv.userName = newUser ? newUser.name : null;
   dv.status = 'Im Einsatz';
-  dv.history.push({date:'2026-07-27', event:'Benutzerwechsel', note: (oldName? 'Von '+oldName+' ':'') + (newUser? 'an '+newUser.name+' übergeben':'zurückgegeben, kein neuer Benutzer')});
+  dv.history.push({date:todayStr(), event:'Benutzerwechsel', note: (oldName? 'Von '+oldName+' ':'') + (newUser? 'an '+newUser.name+' übergeben':'zurückgegeben, kein neuer Benutzer')});
   closeModal();
   showToast('Gerät wurde neu zugewiesen.');
   render();
@@ -1500,8 +1575,8 @@ function saveReassign(id){
 function openRetireModal(id){ state.modal={type:'retire', payload:{id}}; render(); }
 function confirmRetire(id){
   const dv = deviceById(id);
-  dv.status='Ausgemustert'; dv.returnedDate='2026-07-27'; dv.userId=null; dv.userName=null;
-  dv.history.push({date:'2026-07-27', event:'Ausmusterung', note:'Gerät wurde ausgemustert'});
+  dv.status='Ausgemustert'; dv.returnedDate=todayStr(); dv.userId=null; dv.userName=null;
+  dv.history.push({date:todayStr(), event:'Ausmusterung', note:'Gerät wurde ausgemustert'});
   closeModal();
   showToast('Gerät wurde ausgemustert.');
   render();
@@ -1509,23 +1584,38 @@ function confirmRetire(id){
 
 /* ---- Austausch verschieben ---- */
 function openPostponeModal(id){ state.modal={type:'postpone', payload:{id}}; render(); }
-function confirmPostpone(id){
-  const dv = deviceById(id);
+function computePostponeResult(dv){
   const fixedInput = document.getElementById('postpone-fixed-date');
   const fixedDate = fixedInput && fixedInput.value ? fixedInput.value : null;
-  let newDate, note;
-  if(fixedDate){
-    newDate = fixedDate;
-    note = 'Auf festes Datum gesetzt: '+fmtDate(newDate);
-  } else {
-    const months = parseInt(document.getElementById('postpone-months').value, 10);
-    const base = dv.replacementPlanned || addYears(dv.issuedDate, 4);
-    newDate = addMonths(base, months);
-    note = 'Um '+months+' Monate verschoben — neues Datum: '+fmtDate(newDate);
-  }
+  if(fixedDate) return {newDate: fixedDate, viaFixedDate: true};
+  const monthsSelect = document.getElementById('postpone-months');
+  const months = monthsSelect ? parseInt(monthsSelect.value, 10) : null;
+  const base = dv.replacementPlanned || addYears(dv.issuedDate, 4);
+  return {newDate: months!=null ? addMonths(base, months) : null, months, viaFixedDate: false};
+}
+function updatePostponePreview(id){
+  const dv = deviceById(id);
+  const holder = document.getElementById('postpone-preview');
+  if(!dv || !holder) return;
+  const result = computePostponeResult(dv);
+  if(!result.newDate){ holder.innerHTML = ''; return; }
+  holder.innerHTML = `
+    <div class="cell-muted" style="font-size:11px; text-transform:uppercase; letter-spacing:.03em; font-weight:700;">Neu geplantes Austauschdatum</div>
+    <div style="font-size:22px; font-weight:800; color:var(--blue-700); margin-top:4px;">${fmtDate(result.newDate)}</div>
+    ${result.viaFixedDate ? `<div class="cell-muted" style="font-size:12px; margin-top:2px;">Festes Datum</div>` : `<div class="cell-muted" style="font-size:12px; margin-top:2px;">Ausgehend vom aktuellen Austauschdatum + ${result.months} Monate</div>`}
+  `;
+}
+function confirmPostpone(id){
+  const dv = deviceById(id);
+  const result = computePostponeResult(dv);
+  if(!result.newDate){ showToast('Bitte einen Zeitraum oder ein Datum wählen.'); return; }
+  const newDate = result.newDate;
+  const note = result.viaFixedDate
+    ? 'Auf festes Datum gesetzt: '+fmtDate(newDate)
+    : 'Um '+result.months+' Monate verschoben — neues Datum: '+fmtDate(newDate);
   dv.replacementPlanned = newDate;
   dv.replacementManuallyAdjusted = true;
-  dv.history.push({date:'2026-07-27', event:'Austausch verschoben', note});
+  dv.history.push({date:todayStr(), event:'Austausch verschoben', note});
   closeModal();
   showToast('Austausch wurde auf '+fmtDate(newDate)+' verschoben.');
   render();
@@ -1535,9 +1625,45 @@ function resetPostpone(id){
   const standard = dv.issuedDate ? addYears(dv.issuedDate, 4) : null;
   dv.replacementPlanned = standard;
   dv.replacementManuallyAdjusted = false;
-  dv.history.push({date:'2026-07-27', event:'Verschiebung zurückgesetzt', note:'Austauschdatum wieder auf Standard gesetzt: '+fmtDate(standard)});
+  dv.history.push({date:todayStr(), event:'Verschiebung zurückgesetzt', note:'Austauschdatum wieder auf Standard gesetzt: '+fmtDate(standard)});
   showToast('Zurückgesetzt auf Standard: '+fmtDate(standard));
   render();
+}
+
+/* ---- Kommentar-Historie ---- */
+function addDeviceComment(id){
+  const input = document.getElementById('quick-comment-input');
+  const text = input ? input.value.trim() : '';
+  if(!text){ showToast('Bitte einen Kommentartext eingeben.'); return; }
+  const dv = deviceById(id);
+  dv.comments = dv.comments || [];
+  dv.comments.unshift({date: todayStr(), text});
+  showToast('Kommentar gespeichert.');
+  render();
+}
+
+/* ---- "Kein Austausch mehr nötig" — unabhängig vom Ausmustern ---- */
+function toggleNoReplacementNeeded(id){
+  const dv = deviceById(id);
+  dv.noReplacementNeeded = !dv.noReplacementNeeded;
+  dv.history.push({
+    date: todayStr(),
+    event: dv.noReplacementNeeded ? 'Kein Austausch mehr nötig markiert' : 'Austauschplanung reaktiviert',
+    note: dv.noReplacementNeeded ? 'Das Gerät bleibt im Einsatz, wird aber nicht mehr zum Austausch vorgesehen.' : 'Das ursprünglich vorgesehene Austauschdatum gilt wieder.',
+  });
+  showToast(dv.noReplacementNeeded ? 'Als „kein Austausch mehr nötig" markiert.' : 'Austauschplanung wieder aktiviert.');
+  render();
+}
+
+/* ---- Gerät endgültig löschen (anders als "ausmustern": entfernt den Datensatz komplett,
+   die Inventar-ID wird für das nächste neue Gerät wieder frei) ---- */
+function openDeviceDeleteModal(id){ state.modal={type:'device-delete', payload:{id}}; render(); }
+function confirmDeviceDelete(id){
+  const idx = DEVICES.findIndex(d=>d.id===id);
+  if(idx>-1) DEVICES.splice(idx,1);
+  closeModal();
+  showToast('Gerät wurde endgültig gelöscht — die ID ist für ein neues Gerät wieder verfügbar.');
+  goBack();
 }
 
 /* =========================================================
@@ -1555,7 +1681,7 @@ function userSortValue(u, key){
 }
 function renderUsersList(){
   const q = state.userQuery.trim().toLowerCase();
-  const departments = [...new Set(USERS.map(u=>u.department))].sort();
+  const departments = sortedAlpha([...new Set(USERS.map(u=>u.department))]);
   const f = state.userFilter;
   let list = USERS.filter(u=>{
     if(f.department!=='alle' && u.department!==f.department) return false;
@@ -1566,7 +1692,9 @@ function renderUsersList(){
   list = applySort(list, 'users', userSortValue);
   return `
     <div class="page-header">
+      <div style="display:flex; gap:14px; align-items:center;">${pageIconBadge('users','users')}
       <div><div class="page-title">Mitarbeitende</div><div class="page-sub">${USERS.filter(u=>u.status==='Aktiv').length} aktive Mitarbeitende</div></div>
+      </div>
       <div class="page-actions">
         ${canEdit() ? `<button class="btn btn-primary" onclick="openUserEditModal(null)">${icon('plus')} Neuer Mitarbeiter</button>` : ''}
       </div>
@@ -1579,7 +1707,7 @@ function renderUsersList(){
       </select>
       <select class="filter-select" onchange="state.userFilter.status=this.value; render();">
         <option value="alle" ${f.status==='alle'?'selected':''}>Alle Status</option>
-        ${CATEGORY_LISTS.userStatus.map(s=>`<option value="${s}" ${f.status===s?'selected':''}>${s}</option>`).join('')}
+        ${sortedAlpha(CATEGORY_LISTS.userStatus).map(s=>`<option value="${s}" ${f.status===s?'selected':''}>${s}</option>`).join('')}
       </select>
       <div style="flex:1"></div>
       <button class="icon-btn ${refreshInProgress?'spin':''}" onclick="forceRefresh()" title="Aktualisieren">${icon('refresh')}</button>
@@ -1608,7 +1736,7 @@ function renderUsersList(){
     </table></div></div>`}
   `;
 }
-function openUser(id){ closeModal(); state.view='users'; state.currentUserId=id; render(); window.scrollTo(0,0); }
+function openUser(id){ pushNavHistory(); closeModal(); state.view='users'; state.currentUserId=id; render(); window.scrollTo(0,0); }
 function backToUsers(){ state.currentUserId=null; render(); }
 function renderUserDetail(id){
   const u = userById(id);
@@ -1616,11 +1744,11 @@ function renderUserDetail(id){
   const devs = devicesForUser(id);
   const licenseNames = (u.assignedLicensesRaw||'').split(',').map(s=>s.trim()).filter(Boolean);
   return `
-    ${backButton('backToUsers')}
+    ${backButton('goBack')}
     <div class="breadcrumb"><span class="bc-link" onclick="backToUsers()">Mitarbeitende</span> <span>${icon('chevronR')}</span> <span>${u.name}</span></div>
     <div class="card card-pad">
       <div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap;">
-        <div class="avatar" style="width:64px; height:64px; font-size:18px;">${u.initials}</div>
+        <div class="avatar" style="width:64px; height:64px; font-size:18px; background:var(--violet-50); color:var(--violet-700);">${u.initials}</div>
         <div style="flex:1; min-width:220px;">
           <div style="font-size:19px; font-weight:700;">${u.name}</div>
           <div class="cell-muted">${u.department}</div>
@@ -1628,8 +1756,9 @@ function renderUserDetail(id){
           ${canEdit() ? `<div class="detail-actions" style="align-items:center;">
             <button class="btn btn-sm" onclick="openUserEditModal('${u.id}')">${icon('edit')} Bearbeiten</button>
             <select style="height:38px; border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:0 10px; background:#fff;" onchange="setUserStatus('${u.id}', this.value)">
-              ${CATEGORY_LISTS.userStatus.map(s=>`<option value="${s}" ${u.status===s?'selected':''}>${s}</option>`).join('')}
+              ${sortedAlpha(CATEGORY_LISTS.userStatus).map(s=>`<option value="${s}" ${u.status===s?'selected':''}>${s}</option>`).join('')}
             </select>
+            ${isAdmin() ? `<button class="btn btn-sm btn-danger" onclick="openUserDeleteModal('${u.id}')">${icon('trash')} Endgültig löschen</button>` : ''}
           </div>` : ''}
         </div>
       </div>
@@ -1646,7 +1775,7 @@ function renderUserDetail(id){
       ${devs.map(dv=>{
         const a=ampelForDevice(dv);
         return `<div class="list-card" onclick="openDevice('${dv.id}')">
-          <div class="list-card-icon">${deviceTypeIcon(dv.type)}</div>
+          <div class="list-card-icon" style="background:var(--teal-50); color:var(--teal-700);">${deviceTypeIcon(dv.type)}</div>
           <div class="list-card-body">
             <div class="list-card-title">${dv.id} · ${dv.name}</div>
             <div class="list-card-sub">${dv.type}</div>
@@ -1666,7 +1795,7 @@ function renderUserDetail(id){
     ${licenseNames.length===0? emptyState('Keine Lizenzen zugewiesen','Über „Lizenzen zuweisen" oben kannst du dieser Person Lizenzen zuordnen.') : `
     <div class="card-list">
       ${licenseNames.map(n=>`<div class="list-card" style="cursor:default;">
-        <div class="list-card-icon">${icon('licenses')}</div>
+        <div class="list-card-icon" style="background:var(--gold-50); color:var(--gold-700);">${icon('licenses')}</div>
         <div class="list-card-body"><div class="list-card-title">${n}</div></div>
         ${canEdit() ? `<button class="icon-btn" style="width:30px;height:30px;" title="Entfernen" onclick="removeAssignedLicense('${u.id}','${n.replace(/'/g,"\\'")}')">${icon('close')}</button>` : ''}
       </div>`).join('')}
@@ -1740,6 +1869,15 @@ function setUserStatus(id, status){
   showToast('Status geändert zu: '+status);
   render();
 }
+function openUserDeleteModal(id){ state.modal={type:'user-delete', payload:{id}}; render(); }
+function confirmUserDelete(id){
+  const idx = USERS.findIndex(u=>u.id===id);
+  if(idx>-1) USERS.splice(idx,1);
+  DEVICES.forEach(dv=>{ if(dv.userId===id){ dv.userId=null; dv.userName=null; } });
+  closeModal();
+  showToast('Mitarbeiter/in wurde gelöscht.');
+  goBack();
+}
 
 /* =========================================================
    LIZENZEN
@@ -1767,7 +1905,9 @@ function renderLicenses(){
   list = applySort(list, 'licenses', licenseSortValue);
   return `
     <div class="page-header">
+      <div style="display:flex; gap:14px; align-items:center;">${pageIconBadge('licenses','licenses')}
       <div><div class="page-title">Lizenzverwaltung</div><div class="page-sub">${LICENSES.length} Softwareprodukte im Bestand</div></div>
+      </div>
       <div class="page-actions">
         ${canEdit() ? `<button class="btn btn-primary" onclick="openLicenseEditModal(null)">${icon('plus')} Neue Lizenz</button>` : ''}
       </div>
@@ -1776,7 +1916,7 @@ function renderLicenses(){
     <div class="toolbar">
       <select class="filter-select" onchange="state.licenseFilter.status=this.value; render();">
         <option value="alle" ${f.status==='alle'?'selected':''}>Alle Status</option>
-        ${CATEGORY_LISTS.licenseStatus.map(s=>`<option value="${s}" ${f.status===s?'selected':''}>${s}</option>`).join('')}
+        ${sortedAlpha(CATEGORY_LISTS.licenseStatus).map(s=>`<option value="${s}" ${f.status===s?'selected':''}>${s}</option>`).join('')}
       </select>
       <div style="flex:1"></div>
       <button class="icon-btn ${refreshInProgress?'spin':''}" onclick="forceRefresh()" title="Aktualisieren">${icon('refresh')}</button>
@@ -1862,7 +2002,7 @@ function licenseEditModal(id){
         <div class="form-field"><label>Hersteller</label><input id="le-vendor" value="${escapeAttr(l.vendor||'')}"></div>
         <div class="form-field"><label>Status</label>
           <select id="le-status">
-            ${CATEGORY_LISTS.licenseStatus.map(s=>`<option value="${s}" ${l.status===s?'selected':''}>${s}</option>`).join('')}
+            ${sortedAlpha(CATEGORY_LISTS.licenseStatus).map(s=>`<option value="${s}" ${l.status===s?'selected':''}>${s}</option>`).join('')}
           </select>
         </div>
         <div class="form-field"><label>Anzahl gekauft</label><input id="le-purchased" type="number" min="0" value="${l.purchased!=null?l.purchased:''}"></div>
@@ -1896,7 +2036,9 @@ function renderProcurement(){
   const list = state.procurementCategory==='alle' ? PROCUREMENT : PROCUREMENT.filter(c=>c.category===state.procurementCategory);
   return `
     <div class="page-header">
+      <div style="display:flex; gap:14px; align-items:center;">${pageIconBadge('procurement','catalog')}
       <div><div class="page-title">Beschaffungsrichtlinie</div><div class="page-sub">Budgetrichtwerte und empfohlene Gerätemodelle je Kategorie — kein Inventar, sondern Richtwerte für Neubeschaffungen</div></div>
+      </div>
       <div class="page-actions">
         <button class="icon-btn ${refreshInProgress?'spin':''}" onclick="forceRefresh()" title="Aktualisieren">${icon('refresh')}</button>
         ${canEdit() ? `<button class="btn btn-primary" onclick="openProcurementEditModal(null)">${icon('plus')} Neue Richtlinie</button>` : ''}
@@ -1913,7 +2055,7 @@ function renderProcurement(){
           <div class="card-header">
             <h3>${c.title}</h3>
             <div style="display:flex; align-items:center; gap:8px;">
-              <span class="badge badge-blue">Budget ${fmtMoney(c.budget)}</span>
+              <span class="badge" style="background:var(--green-50); color:var(--green-700);">Budget ${fmtMoney(c.budget)}</span>
               ${canEdit() ? `<button class="icon-btn" style="width:28px;height:28px;" title="Bearbeiten" onclick="openProcurementEditModal(${idx})">${icon('edit')}</button>
               <button class="icon-btn" style="width:28px;height:28px;" title="Löschen" onclick="openProcurementDeleteModal(${idx})">${icon('trash')}</button>` : ''}
             </div>
@@ -2000,7 +2142,9 @@ function renderQrCenter(){
   const list = DEVICES;
   return `
     <div class="page-header">
+      <div style="display:flex; gap:14px; align-items:center;">${pageIconBadge('qr','qr')}
       <div><div class="page-title">QR-Code-Center</div><div class="page-sub">Jeder Datensatz besitzt einen dauerhaft gültigen QR-Code, der direkt auf die Gerätedetailseite verweist.</div></div>
+      </div>
       <div class="page-actions">
         <button class="icon-btn ${refreshInProgress?'spin':''}" onclick="forceRefresh()" title="Aktualisieren">${icon('refresh')}</button>
         <button class="btn btn-primary" onclick="openFinderModal()">${icon('qr')} Gerät finden</button>
@@ -2011,11 +2155,11 @@ function renderQrCenter(){
       <button class="btn btn-sm" onclick="qrSelectAll()">Alle auswählen</button>
       <button class="btn btn-sm" onclick="qrSelectNone()">Auswahl aufheben</button>
       <select class="filter-select" onchange="state.qrLabelLayout=this.value; render();">
-        <option value="standard-klein" ${state.qrLabelLayout==='standard-klein'?'selected':''}>Etikett: Standard klein</option>
-        <option value="standard-gross" ${state.qrLabelLayout==='standard-gross'?'selected':''}>Etikett: Standard groß</option>
         <option value="avery" ${state.qrLabelLayout==='avery'?'selected':''}>Etikett: Avery</option>
         <option value="brother" ${state.qrLabelLayout==='brother'?'selected':''}>Etikett: Brother P-touch</option>
         <option value="dymo" ${state.qrLabelLayout==='dymo'?'selected':''}>Etikett: Dymo</option>
+        <option value="standard-gross" ${state.qrLabelLayout==='standard-gross'?'selected':''}>Etikett: Standard groß</option>
+        <option value="standard-klein" ${state.qrLabelLayout==='standard-klein'?'selected':''}>Etikett: Standard klein</option>
       </select>
       <div style="flex:1"></div>
       <div class="cell-muted">${state.qrSelected.size} ausgewählt</div>
@@ -2249,7 +2393,9 @@ function removeCategoryValue(listName, value){
 function renderSettings(){
   return `
     <div class="page-header">
+      <div style="display:flex; gap:14px; align-items:center;">${pageIconBadge('settings','settings')}
       <div><div class="page-title">Einstellungen</div><div class="page-sub">Gerätetypen und Status-Werte selbst verwalten — neue Begriffe hinzufügen oder nicht mehr benötigte entfernen.</div></div>
+      </div>
     </div>
     ${!canEdit() ? `<div class="notice">${icon('info')}<div>Deine aktuelle Rolle „${state.role}" erlaubt keine Änderungen. Wechsle zu „IT-Bearbeitung" oder „IT-Administrator", um Kategorien zu bearbeiten.</div></div>` : ''}
     <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(320px,1fr));">
@@ -2403,6 +2549,8 @@ function renderModal(){
   if(m.type==='qr-view') return qrViewModal(m.payload.id);
   if(m.type==='reassign') return reassignModal(m.payload.id);
   if(m.type==='retire') return retireModal(m.payload.id);
+  if(m.type==='device-delete') return deviceDeleteModal(m.payload.id);
+  if(m.type==='user-delete') return userDeleteModal(m.payload.id);
   if(m.type==='postpone') return postponeModal(m.payload.id);
   if(m.type==='user-edit') return userEditModal(m.payload.id);
   if(m.type==='assign-licenses') return assignLicensesModal(m.payload.userId);
@@ -2476,7 +2624,7 @@ function reassignModal(id){
         <label>Neuer Benutzer</label>
         <select id="ra-user">
           <option value="">— Kein Benutzer (zurück ins Lager) —</option>
-          ${activeUsers.map(u=>`<option value="${u.id}" ${dv.userId===u.id?'selected':''}>${u.name} (${u.department})</option>`).join('')}
+          ${sortedByName(activeUsers).map(u=>`<option value="${u.id}" ${dv.userId===u.id?'selected':''}>${u.name} (${u.department})</option>`).join('')}
         </select>
       </div>
     </div>
@@ -2497,6 +2645,35 @@ function retireModal(id){
     </div>
   `);
 }
+function deviceDeleteModal(id){
+  const dv = deviceById(id);
+  return modalWrap(`
+    <div class="modal-header"><h3>Gerät endgültig löschen</h3><button class="icon-btn" onclick="closeModal()">${icon('close')}</button></div>
+    <div class="modal-body">
+      <p>Soll <strong>${dv.id} — ${dv.name}</strong> wirklich endgültig gelöscht werden? Das entfernt den gesamten Datensatz inklusive Historie — anders als „Ausmustern", das den Datensatz zur Nachverfolgung behält.</p>
+      <div class="notice" style="margin-top:14px;">${icon('info')}<div>Die Inventar-ID <strong>${dv.id}</strong> wird danach wieder frei und automatisch dem nächsten neu angelegten Gerät zugewiesen.</div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Abbrechen</button>
+      <button class="btn btn-danger" onclick="confirmDeviceDelete('${id}')">Endgültig löschen</button>
+    </div>
+  `);
+}
+function userDeleteModal(id){
+  const u = userById(id);
+  const devCount = devicesForUser(id).length;
+  return modalWrap(`
+    <div class="modal-header"><h3>Mitarbeiter/in endgültig löschen</h3><button class="icon-btn" onclick="closeModal()">${icon('close')}</button></div>
+    <div class="modal-body">
+      <p>Soll <strong>${u.name}</strong> wirklich endgültig gelöscht werden? Das entfernt den gesamten Datensatz.</p>
+      ${devCount>0 ? `<div class="notice" style="margin-top:14px;">${icon('warn')}<div>Dieser Person sind aktuell <strong>${devCount} Gerät(e)</strong> zugewiesen. Diese werden dabei auf „nicht zugewiesen" gesetzt, nicht gelöscht.</div></div>` : ''}
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Abbrechen</button>
+      <button class="btn btn-danger" onclick="confirmUserDelete('${id}')">Endgültig löschen</button>
+    </div>
+  `);
+}
 function postponeModal(id){
   const dv = deviceById(id);
   const current = dv.replacementPlanned;
@@ -2506,15 +2683,16 @@ function postponeModal(id){
       <div class="cell-muted" style="margin-bottom:14px;">Aktuell vorgesehen: <strong>${fmtDate(current)}</strong></div>
       <div class="form-field">
         <label>Um einen Zeitraum verschieben</label>
-        <select id="postpone-months" onchange="document.getElementById('postpone-fixed-date').value='';">
+        <select id="postpone-months" onchange="document.getElementById('postpone-fixed-date').value=''; updatePostponePreview('${id}');">
           ${POSTPONE_OPTIONS.map(o=>`<option value="${o.months}">${o.label}</option>`).join('')}
         </select>
       </div>
       <div class="cell-muted" style="margin:16px 0; text-align:center; font-weight:700; letter-spacing:.03em; font-size:11px; text-transform:uppercase;">— oder —</div>
       <div class="form-field">
         <label>Festes Datum wählen</label>
-        <input type="date" id="postpone-fixed-date">
+        <input type="date" id="postpone-fixed-date" oninput="updatePostponePreview('${id}');">
       </div>
+      <div id="postpone-preview" style="margin-top:16px; padding:14px 16px; background:var(--blue-50); border:1.5px solid var(--blue-100); border-radius:var(--radius); text-align:center;"></div>
       <div class="cell-muted" style="margin-top:10px; font-size:12px;">Wird ein festes Datum gewählt, hat es Vorrang vor dem Zeitraum oben. Auf iPad/iPhone öffnet das Datumsfeld ein Auswahlrad. Die Änderung wird in der Gerätehistorie vermerkt.</div>
     </div>
     <div class="modal-footer">
@@ -2526,7 +2704,7 @@ function postponeModal(id){
 function userEditModal(id){
   const isNew = !id;
   const u = isNew ? {} : userById(id);
-  const departments = [...new Set(USERS.map(x=>x.department))];
+  const departments = sortedAlpha([...new Set(USERS.map(x=>x.department))]);
   return modalWrap(`
     <div class="modal-header"><h3>${isNew?'Neuen Mitarbeiter anlegen':'Mitarbeiter bearbeiten — '+u.name}</h3><button class="icon-btn" onclick="closeModal()">${icon('close')}</button></div>
     <div class="modal-body">
@@ -2538,7 +2716,7 @@ function userEditModal(id){
         </div>
         <div class="form-field"><label>Status</label>
           <select id="ue-status">
-            ${CATEGORY_LISTS.userStatus.map(s=>`<option value="${s}" ${(u.status===s || (!u.status && s==='Aktiv'))?'selected':''}>${s}</option>`).join('')}
+            ${sortedAlpha(CATEGORY_LISTS.userStatus).map(s=>`<option value="${s}" ${(u.status===s || (!u.status && s==='Aktiv'))?'selected':''}>${s}</option>`).join('')}
           </select>
         </div>
         <div class="form-field full"><label>Kommentar</label><textarea id="ue-comment">${escapeHtml(u.comment||'')}</textarea></div>
@@ -2561,7 +2739,7 @@ function assignLicensesModal(userId){
         <div class="cell-muted" style="font-weight:700; text-transform:uppercase; font-size:11px; letter-spacing:.03em; margin-bottom:8px;">Bereits zugewiesen</div>
         <div class="card-list" style="margin-bottom:16px;">
           ${assigned.map(n=>`<div class="list-card" style="cursor:default;">
-            <div class="list-card-icon">${icon('licenses')}</div>
+            <div class="list-card-icon" style="background:var(--gold-50); color:var(--gold-700);">${icon('licenses')}</div>
             <div class="list-card-body"><div class="list-card-title">${n}</div></div>
             <button class="icon-btn" style="width:30px;height:30px;" title="Entfernen" onclick="removeAssignedLicense('${userId}','${n.replace(/'/g,"\\'")}'); reopenAssignLicensesModal('${userId}');">${icon('close')}</button>
           </div>`).join('')}
@@ -2573,7 +2751,7 @@ function assignLicensesModal(userId){
           <label>Weitere Lizenz hinzufügen</label>
           <select id="assign-license-select" onchange="if(this.value){ addAssignedLicense('${userId}', this.value); reopenAssignLicensesModal('${userId}'); }">
             <option value="">— Lizenz auswählen —</option>
-            ${available.map(l=>{
+            ${sortedByName(available, 'software').map(l=>{
               const free = l.purchased - licenseAssignedCount(l.software);
               return `<option value="${escapeAttr(l.software)}">${escapeHtml(l.software)} (${free} frei von ${l.purchased})</option>`;
             }).join('')}
@@ -2597,10 +2775,10 @@ function deviceEditModal(id){
     <div class="modal-body">
       <div class="form-grid">
         <div class="form-field"><label>Gerätetyp</label>
-          <select id="de-type">${CATEGORY_LISTS.deviceTypes.map(t=>`<option value="${t}" ${dv.type===t?'selected':''}>${t}</option>`).join('')}</select>
+          <select id="de-type">${sortedAlpha(CATEGORY_LISTS.deviceTypes).map(t=>`<option value="${t}" ${dv.type===t?'selected':''}>${t}</option>`).join('')}</select>
         </div>
         <div class="form-field"><label>Status</label>
-          <select id="de-status">${CATEGORY_LISTS.deviceStatus.map(s=>`<option value="${s}" ${dv.status===s?'selected':''}>${s}</option>`).join('')}</select>
+          <select id="de-status">${sortedAlpha(CATEGORY_LISTS.deviceStatus).map(s=>`<option value="${s}" ${dv.status===s?'selected':''}>${s}</option>`).join('')}</select>
         </div>
         <div class="form-field"><label>Marke</label><input id="de-brand" value="${escapeAttr(dv.brand||'')}"></div>
         <div class="form-field"><label>Modell</label><input id="de-model" value="${escapeAttr(dv.model||'')}"></div>
@@ -2608,7 +2786,7 @@ function deviceEditModal(id){
         <div class="form-field"><label>Benutzer</label>
           <select id="de-user">
             <option value="">— Kein Benutzer —</option>
-            ${activeUsers.map(u=>`<option value="${u.id}" ${dv.userId===u.id?'selected':''}>${u.name}</option>`).join('')}
+            ${sortedByName(activeUsers).map(u=>`<option value="${u.id}" ${dv.userId===u.id?'selected':''}>${u.name}</option>`).join('')}
           </select>
         </div>
         <div class="form-field"><label>Standort</label><input id="de-location" value="${escapeAttr(dv.location||'')}"></div>
@@ -2618,7 +2796,19 @@ function deviceEditModal(id){
         <div class="form-field"><label>Lieferdatum</label><input id="de-deliveryDate" type="date" value="${dv.deliveryDate||''}"></div>
         <div class="form-field"><label>Garantie bis</label><input id="de-warranty" type="date" value="${dv.warrantyUntil||''}"></div>
         <div class="form-field"><label>Ausgegeben am</label><input id="de-issuedDate" type="date" value="${dv.issuedDate||''}"></div>
-        <div class="form-field full"><label>Kommentar</label><textarea id="de-comment">${escapeHtml(dv.comment||'')}</textarea></div>
+        <div class="form-field full">
+          <label>Neuen Kommentar hinzufügen (leer lassen, um keinen neuen Eintrag zu speichern)</label>
+          <textarea id="de-comment" placeholder="z. B. Auffälligkeiten, Rückmeldungen, Reparaturhinweise …"></textarea>
+        </div>
+        ${(!isNew && dv.comments && dv.comments.length>0) ? `
+        <div class="form-field full">
+          <label>Bisherige Kommentare (neueste zuerst)</label>
+          <div class="card" style="max-height:180px; overflow-y:auto;">
+            <ul class="timeline" style="padding:12px 16px 4px;">
+              ${dv.comments.map(c=>`<li class="tl-item"><div class="tl-dot"></div><div class="tl-date">${fmtDate(c.date)}</div><div class="tl-note" style="margin-top:2px;">${escapeHtml(c.text)}</div></li>`).join('')}
+            </ul>
+          </div>
+        </div>` : ''}
       </div>
     </div>
     <div class="modal-footer">
@@ -2676,7 +2866,27 @@ function finderModal(){
 /* =========================================================
    NAV / GLOBAL HANDLERS
    ========================================================= */
+function pushNavHistory(){
+  state.navHistory.push({view: state.view, currentDeviceId: state.currentDeviceId, currentUserId: state.currentUserId});
+  if(state.navHistory.length > 40) state.navHistory.shift();
+}
+function goBack(){
+  const prev = state.navHistory.pop();
+  if(prev){
+    state.view = prev.view;
+    state.currentDeviceId = prev.currentDeviceId;
+    state.currentUserId = prev.currentUserId;
+  } else {
+    // Kein Verlauf vorhanden (z. B. Direktaufruf) — sinnvoller Standard je Bereich
+    if(state.view==='devices') state.currentDeviceId = null;
+    else if(state.view==='users') state.currentUserId = null;
+    else state.view = 'dashboard';
+  }
+  closeModal();
+  render(); window.scrollTo(0,0);
+}
 function goTo(view){
+  pushNavHistory();
   closeModal();
   state.view = view; state.currentDeviceId=null; state.currentUserId=null; state.mobileSidebarOpen=false;
   render(); window.scrollTo(0,0);
@@ -2695,6 +2905,7 @@ function attachGlobalHandlers(){
   paintQrGrid();
   if(state.modal && state.modal.type==='qr-view'){ renderQrSvgInto('qr-modal-holder', deviceQrText(state.modal.payload.id)); }
   if(state.modal && state.modal.type==='label-preview'){ paintLabelQrsWithin('#preview-holder'); }
+  if(state.modal && state.modal.type==='postpone'){ updatePostponePreview(state.modal.payload.id); }
   if(state.modal && state.modal.type==='finder' && state.finderTab==='scan' && !state.cameraScanning){ startCamera(); }
 }
 
