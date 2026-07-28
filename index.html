@@ -583,6 +583,7 @@ const ICONS = {
   clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5A1.5 1.5 0 0110.5 3h3A1.5 1.5 0 0115 4.5V7m2 0v13a1.5 1.5 0 01-1.5 1.5h-7A1.5 1.5 0 017 20V7"/><path d="M10 11v6M14 11v6"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
+  mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5L12 13l8.5-6.5"/></svg>',
 };
 function icon(name){ return ICONS[name] || ''; }
 function deviceTypeIcon(type){
@@ -606,24 +607,24 @@ function escapeAttr(str){ return escapeHtml(str); }
 
 /* ---- Mitarbeitende (18 Datensätze aus Mitarbeitende.xlsx) ---- */
 let USERS = [
-  {id:'DK', name:'Dominik Koopmann', initials:'DK', department:'People&Culture', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'SP', name:'Simon Prostka', initials:'SP', department:'People&Culture', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'CT', name:'Christoph Tewis', initials:'CT', department:'Sonderprojekte', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'AS', name:'Adrian Schinkel', initials:'AS', department:'Infrastruktur', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'AK', name:'Alexander Krensel', initials:'AK', department:'Infrastruktur', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'BM', name:'Berit Sliwinski', initials:'BM', department:'Infrastruktur', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'JB', name:'Jan Berschneider', initials:'JB', department:'Infrastruktur', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'SF', name:'Stefanie Faecks', initials:'SF', department:'Sonderprojekte', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'RN', name:'Rustam Nurmatov', initials:'RN', department:'Infrastruktur', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'RD', name:'Reza Delikhoun', initials:'RD', department:'Hochbau', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'SFl', name:'Saskia Fleischer', initials:'SFl', department:'Hochbau', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'KL', name:'Kristina Lehmann', initials:'KL', department:'Hochbau', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'SK', name:'Simon Kreft', initials:'SK', department:'Hochbau', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'KH', name:'Kim Herr', initials:'KH', department:'People&Culture', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'DN', name:'Derya Noack', initials:'DN', department:'Kommunikation', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'SH', name:'Sarah Hansch', initials:'SH', department:'Infrastruktur', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'SM', name:'Shahin Shikh Mohamed', initials:'SM', department:'Hochbau', status:'Aktiv', comment:null, assignedLicensesRaw:null},
-  {id:'SB', name:'Samuel Banck', initials:'SB', department:'Infrastruktur', status:'Aktiv', comment:null, assignedLicensesRaw:null},
+  {id:'DK', name:'Dominik Koopmann', initials:'DK', department:'People&Culture', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'SP', name:'Simon Prostka', initials:'SP', department:'People&Culture', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'CT', name:'Christoph Tewis', initials:'CT', department:'Sonderprojekte', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'AS', name:'Adrian Schinkel', initials:'AS', department:'Infrastruktur', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'AK', name:'Alexander Krensel', initials:'AK', department:'Infrastruktur', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'BM', name:'Berit Sliwinski', initials:'BM', department:'Infrastruktur', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'JB', name:'Jan Berschneider', initials:'JB', department:'Infrastruktur', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'SF', name:'Stefanie Faecks', initials:'SF', department:'Sonderprojekte', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'RN', name:'Rustam Nurmatov', initials:'RN', department:'Infrastruktur', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'RD', name:'Reza Delikhoun', initials:'RD', department:'Hochbau', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'SFl', name:'Saskia Fleischer', initials:'SFl', department:'Hochbau', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'KL', name:'Kristina Lehmann', initials:'KL', department:'Hochbau', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'SK', name:'Simon Kreft', initials:'SK', department:'Hochbau', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'KH', name:'Kim Herr', initials:'KH', department:'People&Culture', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'DN', name:'Derya Noack', initials:'DN', department:'Kommunikation', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'SH', name:'Sarah Hansch', initials:'SH', department:'Infrastruktur', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'SM', name:'Shahin Shikh Mohamed', initials:'SM', department:'Hochbau', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
+  {id:'SB', name:'Samuel Banck', initials:'SB', department:'Infrastruktur', status:'Aktiv', email:null, comment:null, assignedLicensesRaw:null},
 ];
 
 /* ---- IT-Geräte (33 Datensätze aus IT-Geräte.xlsx) ----
@@ -958,11 +959,11 @@ function ampelForDevice(dev){
   if(!dev.issuedDate || !dev.replacementPlanned) return {level:'gray', label:'Kein Ausgabedatum', dot:'dot-gray', badge:'badge-gray'};
   const days = daysUntil(dev.replacementPlanned);
   // Austausch ist grundsätzlich erst AB Erreichen von 4 Jahren zulässig (bzw. dem manuell
-  // verschobenen Datum) — die Farbstufen darunter sind reine Vorankündigungen, kein "darf schon".
+  // verschobenen Datum) — die Farbstufen darunter sind reine Vorankündigungen, noch NICHT erlaubt.
   if(days <= 0) return {level:'red', label:'Austausch ab jetzt zulässig', dot:'dot-red', badge:'badge-red'};
-  if(days <= 90) return {level:'orange', label:'Austausch in unter 90 Tagen zulässig', dot:'dot-orange', badge:'badge-orange'};
-  if(days <= 365) return {level:'amber', label:'Austausch in unter 12 Monaten zulässig', dot:'dot-amber', badge:'badge-amber'};
-  return {level:'green', label:'Austausch noch nicht zulässig (>12 Monate)', dot:'dot-green', badge:'badge-green'};
+  if(days <= 60) return {level:'orange', label:'Noch nicht zulässig — in unter 60 Tagen möglich', dot:'dot-orange', badge:'badge-orange'};
+  if(days <= 365) return {level:'amber', label:'Noch nicht zulässig — in unter 12 Monaten möglich', dot:'dot-amber', badge:'badge-amber'};
+  return {level:'green', label:'Noch nicht zulässig (über 12 Monate entfernt)', dot:'dot-green', badge:'badge-green'};
 }
 function statusBadgeClass(status){
   const map = {'Im Einsatz':'badge-blue','Im Lager':'badge-gray','Bestellt':'badge-gray','Geliefert':'badge-gray','Ersatzgerät':'badge-blue','Reparatur':'badge-amber','Defekt':'badge-red','Verloren':'badge-red','Ausgemustert':'badge-gray','Entsorgt':'badge-gray'};
@@ -1210,7 +1211,7 @@ function renderDashboard(){
   const licPurchased = LICENSES.reduce((s,l)=>s+l.purchased,0);
   const licAssigned = LICENSES.reduce((s,l)=>s+licenseAssignedCount(l.software),0);
 
-  const next90 = DEVICES.filter(dv=> ampelForDevice(dv).level==='orange');
+  const next60 = DEVICES.filter(dv=> ampelForDevice(dv).level==='orange');
   const warrantyExpiring = DEVICES.filter(dv=>{ if(!dv.warrantyUntil) return false; const days=daysUntil(dv.warrantyUntil); return days!==null && days<=90 && days>=0; });
   const noUser = DEVICES.filter(dv=> !dv.userId && ['Im Einsatz','Ersatzgerät'].includes(dv.status));
   const noWarranty = DEVICES.filter(dv=> !dv.warrantyUntil);
@@ -1251,7 +1252,7 @@ function renderDashboard(){
 
     <div class="section-title">Hinweise &amp; Warnungen</div>
     <div class="grid warn-grid">
-      ${warnCard(next90.length, 'Geräte innerhalb der nächsten 90 Tage austauschen', "goTo('devices')")}
+      ${warnCard(next60.length, 'Geräte innerhalb der nächsten 60 Tage austauschen', "goTo('devices')")}
       ${warnCard(warrantyExpiring.length, 'Garantien laufen in 90 Tagen ab', "goTo('devices')")}
       ${warnCard(noUser.length, 'Geräte ohne Benutzer (im Einsatz)', "goTo('devices')")}
       ${warnCard(noWarranty.length, 'Geräte ohne hinterlegte Garantie', "goTo('devices')")}
@@ -1410,6 +1411,7 @@ function renderDeviceDetail(id){
           <div class="detail-actions">
             ${canEdit() ? `<button class="btn btn-sm" onclick="openDeviceEditModal('${dv.id}')">${icon('edit')} Bearbeiten</button>` : ''}
             ${dv.userId ? `<button class="btn btn-sm" onclick="openUser('${dv.userId}')">${icon('user')} Benutzer öffnen</button>` : ''}
+            <button class="btn btn-sm" onclick="composeDeviceEmail('${dv.id}')">${icon('mail')} E-Mail schreiben</button>
             <button class="btn btn-sm" onclick="openQrModal('${dv.id}')">${icon('qr')} QR-Code anzeigen</button>
             <button class="btn btn-sm" onclick="printSingleQr('${dv.id}')">${icon('print')} QR-Code drucken</button>
             <button class="btn btn-sm" onclick="printSingleLabel('${dv.id}')">${icon('print')} Inventaretikett drucken</button>
@@ -1520,6 +1522,45 @@ function renderQrSvgIntoEl(el, text){
   });
 }
 function renderQrSvgInto(elId, text){ renderQrSvgIntoEl(document.getElementById(elId), text); }
+
+/* ---- E-Mail zu einem Gerät verfassen (öffnet den Standard-Mail-Client, z. B. Outlook) ---- */
+const IT_SUPPORT_EMAIL = 'IT@te-pm.de';
+function buildMailto(to, cc, subject, body){
+  const parts = [];
+  if(cc) parts.push('cc='+encodeURIComponent(cc));
+  parts.push('subject='+encodeURIComponent(subject));
+  parts.push('body='+encodeURIComponent(body));
+  return 'mailto:'+(to||'')+'?'+parts.join('&');
+}
+function composeDeviceEmail(id){
+  const dv = deviceById(id);
+  const usr = dv.userId ? userById(dv.userId) : null;
+  const toEmail = (usr && usr.email) ? usr.email : '';
+  const subject = 'IT-Gerät '+dv.id+' – '+dv.name;
+  const lines = [
+    'Gerätedaten:',
+    '',
+    'Inventar-ID: '+dv.id,
+    'Gerät: '+dv.name,
+    'Typ: '+dv.type,
+    'Marke: '+dv.brand,
+    'Modell: '+dv.model,
+    'Seriennummer: '+(dv.serial || '—'),
+    'Status: '+dv.status,
+    'Standort: '+(dv.location || '—'),
+    'Ausgegeben am: '+(dv.issuedDate ? fmtDate(dv.issuedDate) : '—'),
+    'Austausch vorgesehen: '+(dv.replacementPlanned ? fmtDate(dv.replacementPlanned) : '—'),
+    '',
+  ];
+  if(!usr){
+    lines.push('Hinweis: Für dieses Gerät ist aktuell keine Person zugewiesen.');
+  } else if(!usr.email){
+    lines.push('Hinweis: Für '+usr.name+' ist keine E-Mail-Adresse hinterlegt — bitte manuell eintragen.');
+  }
+  const body = lines.join('\n');
+  if(!toEmail){ showToast(usr ? 'Für '+usr.name+' ist keine E-Mail-Adresse hinterlegt — bitte im Mail-Programm ergänzen.' : 'Kein Benutzer zugewiesen — bitte Empfänger im Mail-Programm ergänzen.'); }
+  window.location.href = buildMailto(toEmail, IT_SUPPORT_EMAIL, subject, body);
+}
 
 function paintDeviceQr(){
   if(state.currentDeviceId){ renderQrSvgInto('qr-hero-holder', deviceQrText(state.currentDeviceId)); }
@@ -1775,6 +1816,7 @@ function renderUserDetail(id){
       <div class="field-list" style="margin-top:18px;">
         ${field('Kürzel', u.initials)}
         ${field('Abteilung', u.department)}
+        ${field('E-Mail', u.email ? `<a href="mailto:${escapeAttr(u.email)}" style="color:var(--blue-600);">${escapeHtml(u.email)}</a>` : '<span class="cell-muted">— nicht hinterlegt —</span>')}
       </div>
       ${u.comment ? `<div style="margin-top:14px;">${field('Kommentar', escapeHtml(u.comment))}</div>` : ''}
     </div>
@@ -1846,6 +1888,7 @@ function saveUserEdit(id){
   if(!name){ showToast('Bitte einen Namen eingeben.'); return; }
   let initials = g('initials').value.trim();
   if(!initials) initials = suggestInitials(name);
+  const email = g('email').value.trim() || null;
   if(isNew){
     let candidate = initials, n=1;
     while(USERS.some(u=>u.id===candidate)){ n++; candidate = initials+n; }
@@ -1853,6 +1896,7 @@ function saveUserEdit(id){
       id: candidate, name, initials: candidate,
       department: g('department').value.trim() || '—',
       status: g('status').value,
+      email,
       comment: g('comment').value || null,
       assignedLicensesRaw: null,
     };
@@ -1865,6 +1909,7 @@ function saveUserEdit(id){
     u.name = name; u.initials = initials;
     u.department = g('department').value.trim() || '—';
     u.status = g('status').value;
+    u.email = email;
     u.comment = g('comment').value || null;
     // Gerätezuordnungen (userName) an neuen Namen anpassen
     DEVICES.forEach(dv=>{ if(dv.userId===u.id) dv.userName = u.name; });
@@ -2754,6 +2799,7 @@ function userEditModal(id){
         <div class="form-field"><label>Abteilung</label><input id="ue-department" list="ue-dept-list" value="${escapeAttr(u.department||'')}">
           <datalist id="ue-dept-list">${departments.map(d=>`<option value="${escapeAttr(d)}">`).join('')}</datalist>
         </div>
+        <div class="form-field"><label>E-Mail</label><input id="ue-email" type="email" value="${escapeAttr(u.email||'')}" placeholder="vorname.nachname@te-pm.de"></div>
         <div class="form-field"><label>Status</label>
           <select id="ue-status">
             ${sortedAlpha(CATEGORY_LISTS.userStatus).map(s=>`<option value="${s}" ${(u.status===s || (!u.status && s==='Aktiv'))?'selected':''}>${s}</option>`).join('')}
