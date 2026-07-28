@@ -86,6 +86,15 @@ Minimum version required to store current data is: `+i+`.
   --slate-600:#4B5768;
   --slate-700:#374151;
 
+  /* Noch eine Stufe dezenter als die -50-Töne — für ganzflächige Seitenhintergründe */
+  --blue-25:#F6F9FE;
+  --teal-25:#F1FAFA;
+  --violet-25:#F8F6FD;
+  --gold-25:#FDF8ED;
+  --green-25:#F4FBF6;
+  --rose-25:#FDF4F7;
+  --slate-25:#F6F8FA;
+
   --radius-sm:6px;
   --radius:10px;
   --radius-lg:14px;
@@ -1066,7 +1075,7 @@ function render(){
     ${renderSidebar()}
     <div class="main-col">
       ${renderTopbar()}
-      <div class="content">${renderView()}</div>
+      <div class="content" style="background:var(--${SECTION_COLORS[state.view]||'blue'}-25);">${renderView()}</div>
     </div>
     ${state.modal ? renderModal() : ''}
     ${state.toast ? `<div class="toast">${icon('check')} ${state.toast}</div>` : ''}
