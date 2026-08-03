@@ -1216,6 +1216,7 @@ const state = {
 
   userQuery: '',
   userFilter: {department:'alle', status:'alle'},
+  userDeviceFilter: {type:'alle', status:'alle'},
   currentUserId: null,
 
   licenseFilter: {status:'alle'},
@@ -1226,6 +1227,7 @@ const state = {
     devices: {key:'id', dir:'asc'},
     users: {key:'name', dir:'asc'},
     licenses: {key:'software', dir:'asc'},
+    userDevices: {key:'id', dir:'asc'},
   },
 
   qrSelected: new Set(),
@@ -1536,7 +1538,7 @@ function renderDevicesTable(list){
           <td data-label="Gerät"><span class="cell-strong">${dv.name}</span></td>
           <td data-label="Typ">${dv.type}</td>
           <td data-label="Status"><span class="badge ${statusBadgeClass(dv.status)}">${dv.status}</span></td>
-          <td data-label="Benutzer">${dv.userName || '<span class="cell-muted">— nicht zugewiesen —</span>'}</td>
+          <td data-label="Benutzer">${dv.userId ? `<a onclick="event.stopPropagation(); openUser('${dv.userId}')" style="color:var(--blue-600); cursor:pointer; font-weight:600; text-decoration:underline;">${escapeHtml(dv.userName)}</a>` : '<span class="cell-muted">— nicht zugewiesen —</span>'}</td>
           <td data-label="Ausgegeben am" class="cell-muted">${fmtDate(dv.issuedDate)}</td>
           <td data-label="Austausch">
             <span class="dot ${a.dot}"></span> <span class="cell-muted">${a.suppressed ? a.label : (dv.replacementPlanned ? fmtDate(dv.replacementPlanned) : a.label)}</span>
@@ -1563,7 +1565,7 @@ function renderDevicesCards(list){
           <span class="badge ${statusBadgeClass(dv.status)}">${dv.status}</span>
           <span class="dot ${a.dot}"></span>
         </div>
-        <div class="cell-muted" style="margin-top:8px; font-size:12px;">${dv.userName || 'Nicht zugewiesen'}</div>
+        <div class="cell-muted" style="margin-top:8px; font-size:12px;">${dv.userId ? `<a onclick="event.stopPropagation(); openUser('${dv.userId}')" style="color:var(--blue-600); cursor:pointer; font-weight:600; text-decoration:underline;">${escapeHtml(dv.userName)}</a>` : 'Nicht zugewiesen'}</div>
       </div>`;
     }).join('')}
   </div>`;
@@ -1625,7 +1627,7 @@ function renderDeviceDetail(id){
           ${field('Modell', dv.model)}
           ${field('Seriennummer', dv.serial || '—')}
           ${field('Standort', dv.location || '—')}
-          ${field('Aktueller Benutzer', dv.userName || '— nicht zugewiesen —')}
+          ${field('Aktueller Benutzer', dv.userId ? `<a onclick="openUser('${dv.userId}')" style="color:var(--blue-600); cursor:pointer; font-weight:700; text-decoration:underline;">${escapeHtml(dv.userName)}</a>` : '— nicht zugewiesen —')}
         </div>
       </div>
       <div class="card">
@@ -1978,6 +1980,15 @@ function renderUsersList(){
 }
 function openUser(id){ pushNavHistory(); closeModal(); state.view='users'; state.currentUserId=id; render(); window.scrollTo(0,0); }
 function backToUsers(){ state.currentUserId=null; render(); }
+function filteredUserDevices(userId){
+  const f = state.userDeviceFilter;
+  const list = devicesForUser(userId).filter(dv=>{
+    if(f.type!=='alle' && dv.type!==f.type) return false;
+    if(f.status!=='alle' && dv.status!==f.status) return false;
+    return true;
+  });
+  return applySort(list, 'userDevices', deviceSortValue);
+}
 function renderUserDetail(id){
   const u = userById(id);
   if(!u) return emptyState('Mitarbeiter/in nicht gefunden','');
@@ -2011,23 +2022,49 @@ function renderUserDetail(id){
     </div>
 
     <div class="section-title">Zugewiesene Geräte (${devs.length})</div>
-    ${devs.length===0? emptyState('Keine Geräte zugewiesen','Dieser Person sind aktuell keine Geräte zugeordnet.') : `
-    <div class="card-list">
-      ${devs.map(dv=>{
-        const a=ampelForDevice(dv);
-        return `<div class="list-card" onclick="openDevice('${dv.id}')">
-          <div class="list-card-icon" style="background:var(--teal-50); color:var(--teal-700);">${deviceTypeIcon(dv.type)}</div>
-          <div class="list-card-body">
-            <div class="list-card-title">${dv.id} · ${dv.name}</div>
-            <div class="list-card-sub">${dv.type}</div>
-          </div>
-          <div class="list-card-meta">
-            <span class="badge ${statusBadgeClass(dv.status)}">${dv.status}</span>
-            <span class="badge ${a.badge}"><span class="dot ${a.dot}"></span> ${a.label}</span>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>`}
+    ${devs.length===0? emptyState('Keine Geräte zugewiesen','Dieser Person sind aktuell keine Geräte zugeordnet.') : (function(){
+        const filtered = filteredUserDevices(id);
+        const f = state.userDeviceFilter;
+        const typesInUse = sortedAlpha([...new Set(devs.map(d=>d.type))]);
+        const statusesInUse = sortedAlpha([...new Set(devs.map(d=>d.status))]);
+        return `
+        <div class="toolbar">
+          <select class="filter-select" onchange="state.userDeviceFilter.type=this.value; render();">
+            <option value="alle" ${f.type==='alle'?'selected':''}>Alle Gerätetypen</option>
+            ${typesInUse.map(t=>`<option value="${t}" ${f.type===t?'selected':''}>${t}</option>`).join('')}
+          </select>
+          <select class="filter-select" onchange="state.userDeviceFilter.status=this.value; render();">
+            <option value="alle" ${f.status==='alle'?'selected':''}>Alle Status</option>
+            ${statusesInUse.map(s=>`<option value="${s}" ${f.status===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+          ${(f.type!=='alle'||f.status!=='alle') ? `<button class="btn btn-sm btn-ghost" onclick="state.userDeviceFilter={type:'alle',status:'alle'}; render();">${icon('close')} Filter zurücksetzen</button>` : ''}
+          <div style="flex:1"></div>
+          <div class="cell-muted">${filtered.length} von ${devs.length} Geräten</div>
+        </div>
+        ${filtered.length===0 ? emptyState('Keine Geräte gefunden','Passe die Filter an.') : `
+        <div class="card"><div class="table-wrap"><table class="data-table">
+          <thead><tr>
+            ${sortableTh('userDevices','id','Inventar-ID')}
+            ${sortableTh('userDevices','name','Gerät')}
+            ${sortableTh('userDevices','type','Typ')}
+            ${sortableTh('userDevices','status','Status')}
+            ${sortableTh('userDevices','replacement','Austausch')}
+          </tr></thead>
+          <tbody>
+            ${filtered.map(dv=>{
+              const a = ampelForDevice(dv);
+              return `<tr onclick="openDevice('${dv.id}')">
+                <td data-label="Inventar-ID"><span class="id-mono">${dv.id}</span></td>
+                <td data-label="Gerät"><span class="cell-strong">${dv.name}</span></td>
+                <td data-label="Typ">${dv.type}</td>
+                <td data-label="Status"><span class="badge ${statusBadgeClass(dv.status)}">${dv.status}</span></td>
+                <td data-label="Austausch"><span class="dot ${a.dot}"></span> <span class="cell-muted">${a.suppressed ? a.label : (dv.replacementPlanned ? fmtDate(dv.replacementPlanned) : a.label)}</span></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table></div></div>`}
+        `;
+      })()}
 
     <div class="section-title" style="display:flex; align-items:center; justify-content:space-between;">
       <span>Zugewiesene Lizenzen (${licenseNames.length})</span>
@@ -2276,7 +2313,7 @@ function licenseDeleteModal(id){
    BESCHAFFUNGSRICHTLINIE
    ========================================================= */
 function renderProcurement(){
-  const cats = ['alle', ...new Set(PROCUREMENT.map(c=>c.category))];
+  const cats = ['alle', ...sortedAlpha([...new Set(PROCUREMENT.map(c=>c.category))])];
   const list = state.procurementCategory==='alle' ? PROCUREMENT : PROCUREMENT.filter(c=>c.category===state.procurementCategory);
   return `
     <div class="page-header">
@@ -2675,7 +2712,7 @@ function renderSettings(){
     <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(320px,1fr));">
       ${Object.keys(CATEGORY_META).map(listName=>{
         const meta = CATEGORY_META[listName];
-        const values = CATEGORY_LISTS[listName];
+        const values = sortedAlpha(CATEGORY_LISTS[listName]);
         return `<div class="card">
           <div class="card-header"><h3>${meta.title}</h3><span class="badge badge-blue">${values.length}</span></div>
           <div class="card-pad">
