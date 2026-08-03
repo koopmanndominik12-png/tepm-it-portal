@@ -1063,7 +1063,7 @@ function submitFirebaseLogin(){
   if(!firebaseAuthReady || typeof firebase === 'undefined' || !firebase.auth){
     showLock('Firebase lädt noch — bitte kurz warten und erneut versuchen.'); lockView='firebase'; return;
   }
-  const email = (document.getElementById('lock-email')||{}).value || '';
+  const email = ((document.getElementById('lock-email')||{}).value || '').trim();
   const pw = (document.getElementById('lock-password')||{}).value || '';
   if(!email || !pw){ lockView='firebase'; showLock('Bitte E-Mail und Passwort eingeben.'); return; }
   firebase.auth().signInWithEmailAndPassword(email, pw).then(function(){
@@ -1082,7 +1082,7 @@ function submitForgotPassword(){
   if(!firebaseAuthReady || typeof firebase === 'undefined' || !firebase.auth){
     lockView='forgot'; showLock('Firebase lädt noch — bitte kurz warten und erneut versuchen.'); return;
   }
-  const email = (document.getElementById('lock-forgot-email')||{}).value || '';
+  const email = ((document.getElementById('lock-forgot-email')||{}).value || '').trim();
   if(!email){ lockView='forgot'; showLock('Bitte E-Mail-Adresse eingeben.'); return; }
   const showSentMessage = function(){
     lockView='firebase';
@@ -1099,16 +1099,16 @@ function renderLockScreen(error, info){
     ${info ? `<div class="lock-info">${escapeHtml(info)}</div>` : ''}
     ${lockView==='forgot' ? `
       <div class="lock-back" onclick="switchLockView('firebase')">${icon('chevronL')} Zurück zur Anmeldung</div>
-      <div class="lock-field"><label>E-Mail</label><input id="lock-forgot-email" type="email" placeholder="name@te-pm.de" autofocus onkeydown="if(event.key==='Enter') submitForgotPassword();"></div>
+      <div class="lock-field"><label>E-Mail</label><input id="lock-forgot-email" type="email" placeholder="name@te-pm.de" autofocus autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="email" onkeydown="if(event.key==='Enter') submitForgotPassword();"></div>
       <button class="btn btn-primary btn-block" onclick="submitForgotPassword()">Reset-E-Mail senden</button>
     ` : lockView==='firebase' ? `
       <div class="lock-back" onclick="switchLockView('simple')">${icon('chevronL')} Zurück zum IT-Passwort</div>
-      <div class="lock-field"><label>E-Mail</label><input id="lock-email" type="email" placeholder="name@te-pm.de" autofocus onkeydown="if(event.key==='Enter') submitFirebaseLogin();"></div>
-      <div class="lock-field"><label>Passwort</label><input id="lock-password" type="password" placeholder="Passwort" onkeydown="if(event.key==='Enter') submitFirebaseLogin();"></div>
+      <div class="lock-field"><label>E-Mail</label><input id="lock-email" type="email" placeholder="name@te-pm.de" autofocus autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="email" onkeydown="if(event.key==='Enter') submitFirebaseLogin();"></div>
+      <div class="lock-field"><label>Passwort</label><input id="lock-password" type="password" placeholder="Passwort" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="current-password" onkeydown="if(event.key==='Enter') submitFirebaseLogin();"></div>
       <button class="btn btn-primary btn-block" onclick="submitFirebaseLogin()">Anmelden</button>
       <div class="lock-forgot"><a onclick="switchLockView('forgot')">Passwort vergessen?</a></div>
     ` : `
-      <div class="lock-field"><label>Passwort</label><input id="lock-password" type="password" placeholder="Passwort" autofocus onkeydown="if(event.key==='Enter') submitSimpleLogin();"></div>
+      <div class="lock-field"><label>Passwort</label><input id="lock-password" type="password" placeholder="Passwort" autofocus autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="current-password" onkeydown="if(event.key==='Enter') submitSimpleLogin();"></div>
       <button class="btn btn-primary btn-block" onclick="submitSimpleLogin()">Entsperren</button>
       ${cloudConfigured() ? `<div class="lock-forgot"><a onclick="switchLockView('firebase')">Stattdessen mit E-Mail-Konto anmelden</a></div>` : ''}
     `}
