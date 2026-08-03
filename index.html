@@ -146,9 +146,9 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 }
 .sidebar.collapsed{width:var(--sidebar-w-collapsed);}
 .sidebar-brand{
-  height:var(--topbar-h);
+  min-height:var(--topbar-h);
   display:flex; align-items:center; gap:10px;
-  padding:0 16px;
+  padding:10px 16px;
   border-bottom:1px solid var(--border);
   flex-shrink:0;
   white-space:nowrap; overflow:hidden;
@@ -247,7 +247,22 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 .user-chip .uc-name{font-size:13px; font-weight:600;}
 .user-chip .uc-role{font-size:11px; color:var(--text-muted);}
 
-.content{flex:1; overflow-y:auto; padding:22px 26px 60px;}
+.content{flex:1; overflow-y:auto; padding:22px 26px 60px; position:relative;}
+
+.scroll-top-btn{
+  position:fixed; right:18px; bottom:22px; z-index:30;
+  width:36px; height:36px; border-radius:50%;
+  background:#fff; border:1px solid var(--border-strong);
+  box-shadow:var(--shadow-sm);
+  display:flex; align-items:center; justify-content:center;
+  color:var(--text-muted);
+  opacity:0; visibility:hidden; transform:translateY(6px);
+  transition:opacity .15s ease, transform .15s ease, visibility .15s;
+  cursor:pointer;
+}
+.scroll-top-btn.visible{opacity:1; visibility:visible; transform:translateY(0);}
+.scroll-top-btn:hover{background:var(--gray-50); color:var(--text-secondary);}
+.scroll-top-btn svg{width:16px; height:16px;}
 .page-header{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:18px; flex-wrap:wrap;}
 .page-title{font-size:22px; font-weight:700;}
 .page-sub{font-size:13px; color:var(--text-secondary); margin-top:2px;}
@@ -477,6 +492,7 @@ table.data-table{width:100%; border-collapse:collapse; font-size:13px;}
   .form-grid{grid-template-columns:1fr;}
   .search-box{max-width:none;}
   .finder-btn .fb-text{display:none;}
+  .autosync-label{display:none;}
 }
 
 @media (max-width: 720px){
@@ -586,6 +602,8 @@ const ICONS = {
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0115.3-6.4M21 12a9 9 0 01-15.3 6.4"/><path d="M18 3v5h-5M6 21v-5h5"/></svg>',
   archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 002 2h10a2 2 0 002-2V9M10 13h4"/></svg>',
   chevronR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
+  arrowUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v13a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/><path d="M8 3v5h8V3M8 21v-7h8v7"/></svg>',
   chevronL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
   warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l10 18H2L12 2z"/><path d="M12 9v5M12 17v.01"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
@@ -613,6 +631,12 @@ const ICONS = {
   mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5L12 13l8.5-6.5"/></svg>',
 };
 function icon(name){ return ICONS[name] || ''; }
+
+/* ---- Versionsanzeige ----
+   Wird bei jeder neuen, von Claude gebauten Datei aktualisiert (Datum/Uhrzeit der
+   Erstellung), damit auf einen Blick erkennbar ist, welcher Stand gerade läuft. */
+const APP_VERSION = '2.1';
+const APP_BUILD_TIMESTAMP = '03.08.2026, 17:40 Uhr';
 function deviceTypeIcon(type){
   const map = {"Laptop":"laptop","Desktop-PC":"desktop","Smartphone":"phone","Tablet":"tablet","Monitor":"monitor","Dockingstation":"dock","Headset":"headset","Kopfhörer/Headset":"headset","Drucker":"printer2","Netzwerkgerät":"network","Zubehör":"accessory","Sonstiges":"box"};
   return icon(map[type] || "box");
@@ -856,14 +880,33 @@ function initCloud(){
     cloudDocRef = db.collection(CLOUD_DOC_PATH.collection).doc(CLOUD_DOC_PATH.doc);
     cloudDocRef.onSnapshot(function(snap){
       const wasEnabled = cloudEnabled;
+      const isFirstSnapshot = !receivedFirstCloudSnapshot;
       cloudEnabled = true;
+      receivedFirstCloudSnapshot = true;
       cloudStatusReason = 'Verbunden.';
-      if(!snap.exists) { if(!wasEnabled) render(); return; }
+      if(!snap.exists) {
+        if(isFirstSnapshot){
+          hasUnsavedCloudChanges = false;
+          pushToCloud(currentDataObject()); // noch kein Cloud-Dokument vorhanden — einmalig anlegen
+        }
+        if(!wasEnabled) render();
+        return;
+      }
       const data = snap.data();
       const incoming = JSON.stringify(data);
-      if(incoming === lastAppliedSnapshot) { if(!wasEnabled) render(); return; } // eigene Änderung — nichts Neues, kein Neuzeichnen nötig (verhindert offene Fenster/Dropdowns beim Tippen zu unterbrechen)
+      if(incoming === lastAppliedSnapshot) {
+        if(isFirstSnapshot) hasUnsavedCloudChanges = false;
+        if(!wasEnabled) render();
+        return;
+      } // eigene Änderung — nichts Neues, kein Neuzeichnen nötig (verhindert offene Fenster/Dropdowns beim Tippen zu unterbrechen)
       lastAppliedSnapshot = incoming;
       lastLocalSnapshot = incoming; // verhindert, dass wir das gerade Empfangene gleich wieder zurückschreiben
+      if(isFirstSnapshot){
+        // Der erste empfangene Cloud-Stand gilt als maßgeblich — etwaige lokale Änderungen,
+        // die VOR der Bestätigung der Verbindung entstanden sind (z. B. durch eine veraltete
+        // zwischengespeicherte Version), werden bewusst NICHT nachträglich übertragen.
+        hasUnsavedCloudChanges = false;
+      }
       if(Array.isArray(data.users)) USERS = data.users;
       if(Array.isArray(data.devices)) DEVICES = data.devices;
       if(Array.isArray(data.licenses)) LICENSES = data.licenses;
@@ -892,6 +935,43 @@ function retryCloudInit(){
   setTimeout(initCloud, 50);
 }
 let refreshInProgress = false;
+/* ---- Sicherheitsschutz gegen Datenverlust durch veraltete, zwischengespeicherte Versionen ----
+   Ganz wichtig: Es wird NIE automatisch in die Cloud geschrieben, bevor der tatsächlich
+   aktuelle Cloud-Stand einmal bestätigt empfangen wurde (receivedFirstCloudSnapshot).
+   Ohne das könnte eine alte, im Browser zwischengespeicherte Version beim Öffnen ihren
+   veralteten Datenstand über eine längst aktuellere Version in der Cloud legen. */
+let receivedFirstCloudSnapshot = false;
+let hasUnsavedCloudChanges = false;
+const AUTOSYNC_KEY = 'tepm-it-portal-autosync';
+let autoSyncEnabled = true;
+try{
+  const v = localStorage.getItem(AUTOSYNC_KEY);
+  if(v !== null) autoSyncEnabled = (v === 'true');
+}catch(e){}
+function toggleAutoSync(){
+  autoSyncEnabled = !autoSyncEnabled;
+  try{ localStorage.setItem(AUTOSYNC_KEY, String(autoSyncEnabled)); }catch(e){}
+  showToast(autoSyncEnabled ? 'Automatisches Speichern aktiviert.' : 'Automatisches Speichern deaktiviert — bitte über die Diskette manuell speichern.');
+  if(autoSyncEnabled && hasUnsavedCloudChanges && receivedFirstCloudSnapshot){
+    savePersistedData(); // nachholen, was während der Deaktivierung liegen geblieben ist
+  }
+  render();
+}
+function manualSaveNow(){
+  if(!cloudConfigured()){ showToast('Kein Cloud-Speicher eingerichtet — Daten sind bereits lokal auf diesem Gerät gespeichert.'); return; }
+  if(!cloudEnabled || !cloudDocRef){ showToast('Keine Verbindung zur Cloud — bitte kurz warten oder unten links „Erneut verbinden" nutzen.'); return; }
+  const dataObj = currentDataObject();
+  const snap = JSON.stringify(dataObj);
+  lastAppliedSnapshot = snap;
+  lastLocalSnapshot = snap;
+  cloudDocRef.set(dataObj).then(function(){
+    hasUnsavedCloudChanges = false;
+    showToast('Gespeichert.');
+    render();
+  }).catch(function(err){
+    showToast('Speichern fehlgeschlagen: '+err.message);
+  });
+}
 function forceRefresh(){
   if(refreshInProgress) return;
   refreshInProgress = true;
@@ -904,6 +984,8 @@ function forceRefresh(){
         const incoming = JSON.stringify(data);
         lastAppliedSnapshot = incoming;
         lastLocalSnapshot = incoming;
+        receivedFirstCloudSnapshot = true;
+        hasUnsavedCloudChanges = false;
         if(Array.isArray(data.users)) USERS = data.users;
         if(Array.isArray(data.devices)) DEVICES = data.devices;
         if(Array.isArray(data.licenses)) LICENSES = data.licenses;
@@ -964,7 +1046,19 @@ function savePersistedData(){
     try{ localStorage.setItem(STORAGE_KEY, snap); }
     catch(e){ storageAvailable = false; console.warn('Daten konnten nicht lokal gespeichert werden', e); }
   }
+  if(!cloudConfigured()) return; // kein Cloud-Speicher eingerichtet — rein lokal, fertig
+  if(!receivedFirstCloudSnapshot){
+    // Sicherheitssperre: Wir haben den echten aktuellen Cloud-Stand noch nicht bestätigt
+    // bekommen — auf keinen Fall jetzt schon etwas hochladen, siehe Hinweis oben.
+    hasUnsavedCloudChanges = true;
+    return;
+  }
+  if(!autoSyncEnabled){
+    hasUnsavedCloudChanges = true;
+    return; // nur noch manuell über den Speichern-Button in der Kopfzeile
+  }
   pushToCloud(dataObj);
+  hasUnsavedCloudChanges = false;
 }
 function openResetConfirmModal(){
   state.modal = {type:'reset-confirm', payload:{step:1, error:null}};
@@ -1265,6 +1359,7 @@ function render(){
     <div class="main-col">
       ${renderTopbar()}
       <div class="content" style="background:var(--${SECTION_COLORS[state.view]||'blue'}-25);">${renderView()}</div>
+      <button id="scroll-top-btn" class="scroll-top-btn" onclick="scrollContentToTop()" title="Nach oben">${icon('arrowUp')}</button>
     </div>
     ${state.modal ? renderModal() : ''}
     ${state.toast ? `<div class="toast">${icon('check')} ${state.toast}</div>` : ''}
@@ -1293,6 +1388,7 @@ function renderSidebar(){
       <div>
         <div class="brand-text">TePm IT-Portal</div>
         <div class="brand-sub">Interne IT-Verwaltung</div>
+        <div class="brand-sub" style="font-size:10px; opacity:.75;">v${APP_VERSION} · ${APP_BUILD_TIMESTAMP}</div>
       </div>
     </div>
     <ul class="nav-list">
@@ -1352,6 +1448,13 @@ function renderTopbar(){
     </div>
     <button class="finder-btn" onclick="openFinderModal()">${icon('qr')}<span class="fb-text">Gerät finden</span></button>
     <button class="icon-btn ${refreshInProgress?'spin':''}" onclick="forceRefresh()" title="Aktualisieren">${icon('refresh')}</button>
+    <button class="icon-btn" style="position:relative;" onclick="manualSaveNow()" title="Jetzt in der Cloud speichern">
+      ${icon('save')}
+      ${hasUnsavedCloudChanges ? `<span style="position:absolute; top:5px; right:5px; width:8px; height:8px; border-radius:50%; background:var(--orange-600); border:1.5px solid #fff;"></span>` : ''}
+    </button>
+    <button class="btn btn-sm ${autoSyncEnabled?'':'btn-ghost'}" style="gap:6px;" onclick="toggleAutoSync()" title="Automatisches Speichern in die Cloud ein-/ausschalten">
+      <span class="dot ${autoSyncEnabled?'dot-green':'dot-gray'}"></span><span class="autosync-label">Auto-Speichern ${autoSyncEnabled?'an':'aus'}</span>
+    </button>
     <div class="topbar-spacer"></div>
     <div class="topbar-right">
       <div class="user-chip" onclick="openRoleModal()">
@@ -3355,6 +3458,17 @@ function toggleMobileSidebar(){ state.mobileSidebarOpen = !state.mobileSidebarOp
 function closeMobileSidebar(){ state.mobileSidebarOpen=false; render(); }
 function onSearchInput(val){ state.searchQuery=val; state.searchOpen=true; render(); const el=document.getElementById('global-search'); if(el){ el.focus(); el.setSelectionRange(val.length,val.length);} }
 
+function scrollContentToTop(){
+  const content = document.querySelector('.content');
+  if(content) content.scrollTo({top:0, behavior:'smooth'});
+}
+function updateScrollTopButtonVisibility(){
+  const content = document.querySelector('.content');
+  const btn = document.getElementById('scroll-top-btn');
+  if(!content || !btn) return;
+  if(content.scrollTop > 240){ btn.classList.add('visible'); }
+  else { btn.classList.remove('visible'); }
+}
 function attachGlobalHandlers(){
   document.addEventListener('click', function(e){
     const searchBox = document.querySelector('.search-box');
@@ -3366,6 +3480,11 @@ function attachGlobalHandlers(){
   if(state.modal && state.modal.type==='label-preview'){ paintLabelQrsWithin('#preview-holder'); }
   if(state.modal && state.modal.type==='postpone'){ updatePostponePreview(state.modal.payload.id); }
   if(state.modal && state.modal.type==='finder' && state.finderTab==='scan' && !state.cameraScanning){ startCamera(); }
+  const contentEl = document.querySelector('.content');
+  if(contentEl){
+    contentEl.addEventListener('scroll', updateScrollTopButtonVisibility);
+    updateScrollTopButtonVisibility();
+  }
 }
 
 /* Start: erst Sperrbildschirm-Logik, die App selbst startet erst nach erfolgreichem Login */
