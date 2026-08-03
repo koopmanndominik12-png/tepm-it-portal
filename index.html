@@ -1095,6 +1095,25 @@ function submitForgotPassword(){
   // Bewusst dieselbe Meldung bei Erfolg und Fehler — verrät nicht, ob die E-Mail existiert.
   firebase.auth().sendPasswordResetEmail(email).then(showSentMessage).catch(showSentMessage);
 }
+/* ---- Microsoft-Login (Firmenkonto) ----
+   Setzt voraus: 1) Azure-AD-App-Registrierung, 2) Microsoft als Sign-in-Provider
+   in der Firebase-Konsole aktiviert (Client-ID/Secret dort eingetragen — NICHT hier).
+   Die Tenant-ID unten sorgt nur dafür, dass die Microsoft-Anmeldeseite direkt den
+   richtigen Firmen-Tenant vorauswählt; die eigentliche Absicherung "nur Firmenkonten"
+   passiert bereits durch die Azure-AD-App-Registrierung selbst (Single-Tenant). */
+function submitMicrosoftLogin(){
+  if(!firebaseAuthAvailableNow()){
+    showLock('Firebase lädt noch — bitte kurz warten und erneut versuchen.'); lockView='simple'; return;
+  }
+  const provider = new firebase.auth.OAuthProvider('microsoft.com');
+  provider.setCustomParameters({ tenant: '3736e203-d029-4257-9834-b3d38c7e5fcb' }); // Tewis Projektmanagement GmbH
+  firebase.auth().signInWithPopup(provider).then(function(){
+    unlockApp('firebase');
+  }).catch(function(err){
+    lockView='simple';
+    showLock('Microsoft-Anmeldung fehlgeschlagen: '+(err.message || err.code || err));
+  });
+}
 function renderLockScreen(error, info){
   const subLabels = {simple:'Bitte Passwort eingeben', firebase:'Mit E-Mail-Konto anmelden', forgot:'Passwort zurücksetzen'};
   return `<div class="lock-screen"><div class="lock-card">
@@ -1114,7 +1133,11 @@ function renderLockScreen(error, info){
     ` : `
       <div class="lock-field"><label>Passwort</label><input id="lock-password" type="password" placeholder="Passwort" autofocus autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="current-password" onkeydown="if(event.key==='Enter') submitSimpleLogin();"></div>
       <button class="btn btn-primary btn-block" onclick="submitSimpleLogin()">Entsperren</button>
-      ${cloudConfigured() ? `<div class="lock-forgot"><a onclick="switchLockView('firebase')">Stattdessen mit E-Mail-Konto anmelden</a></div>` : ''}
+      ${cloudConfigured() ? `
+        <div class="lock-forgot" style="margin-top:16px;margin-bottom:8px;">— oder —</div>
+        <button class="btn btn-block" onclick="submitMicrosoftLogin()">Mit Microsoft-Konto anmelden</button>
+        <div class="lock-forgot"><a onclick="switchLockView('firebase')">Stattdessen mit E-Mail-Konto anmelden</a></div>
+      ` : ''}
     `}
   </div></div>`;
 }
