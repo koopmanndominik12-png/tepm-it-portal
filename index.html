@@ -1017,18 +1017,8 @@ function bootAuth(){
 }
 function waitForFirebaseAuth(){
   if(!cloudConfigured()) return;
-  if(typeof firebase === 'undefined' || !firebase.auth){
-    if(!window.__firebaseLoadFailed && authInitAttempts < 30){ authInitAttempts++; setTimeout(waitForFirebaseAuth, 250); }
-    return;
-  }
-  try{
-    if(!firebase.apps || !firebase.apps.length) firebase.initializeApp(CLOUD_CONFIG);
-    firebaseAuthReady = true;
-    firebase.auth().onAuthStateChanged(function(user){
-      if(user && !appUnlocked){ authMethod='firebase'; appUnlocked=true; render(); }
-      else if(!user && appUnlocked && authMethod==='firebase'){ appUnlocked=false; authMethod=null; lockView='firebase'; showLock(); }
-    });
-  }catch(e){ console.warn('Firebase Auth Initialisierung fehlgeschlagen', e); }
+  if(firebaseAuthAvailableNow()) return;
+  if(!window.__firebaseLoadFailed && authInitAttempts < 30){ authInitAttempts++; setTimeout(waitForFirebaseAuth, 250); }
 }
 function unlockApp(method){
   appUnlocked = true;
@@ -1059,8 +1049,22 @@ function submitSimpleLogin(){
   if(val === SIMPLE_LOGIN_PASSWORD){ unlockApp('simple'); }
   else { showLock('Falsches Passwort.'); setTimeout(()=>{ const el=document.getElementById('lock-password'); if(el) el.focus(); }, 30); }
 }
+let authListenerAttached = false;
+function firebaseAuthAvailableNow(){
+  if(typeof firebase === 'undefined' || !firebase.auth) return false;
+  try{ if(!firebase.apps || !firebase.apps.length) firebase.initializeApp(CLOUD_CONFIG); }catch(e){}
+  firebaseAuthReady = true;
+  if(!authListenerAttached){
+    authListenerAttached = true;
+    firebase.auth().onAuthStateChanged(function(user){
+      if(user && !appUnlocked){ authMethod='firebase'; appUnlocked=true; render(); }
+      else if(!user && appUnlocked && authMethod==='firebase'){ appUnlocked=false; authMethod=null; lockView='firebase'; showLock(); }
+    });
+  }
+  return true;
+}
 function submitFirebaseLogin(){
-  if(!firebaseAuthReady || typeof firebase === 'undefined' || !firebase.auth){
+  if(!firebaseAuthAvailableNow()){
     showLock('Firebase lädt noch — bitte kurz warten und erneut versuchen.'); lockView='firebase'; return;
   }
   const email = ((document.getElementById('lock-email')||{}).value || '').trim();
@@ -1079,7 +1083,7 @@ function submitFirebaseLogin(){
   });
 }
 function submitForgotPassword(){
-  if(!firebaseAuthReady || typeof firebase === 'undefined' || !firebase.auth){
+  if(!firebaseAuthAvailableNow()){
     lockView='forgot'; showLock('Firebase lädt noch — bitte kurz warten und erneut versuchen.'); return;
   }
   const email = ((document.getElementById('lock-forgot-email')||{}).value || '').trim();
