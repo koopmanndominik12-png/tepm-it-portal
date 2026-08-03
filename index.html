@@ -803,6 +803,11 @@ const SEED_DEVICES = JSON.parse(JSON.stringify(DEVICES));
 const SEED_LICENSES = JSON.parse(JSON.stringify(LICENSES));
 const SEED_PROCUREMENT = JSON.parse(JSON.stringify(PROCUREMENT));
 const SEED_CATEGORY_LISTS = JSON.parse(JSON.stringify(CATEGORY_LISTS));
+/* Haupt-Passwort (Sperrbildschirm) und Reset-Passwort (Datenrücksetzung) — ab jetzt
+   unter Einstellungen änderbar, werden wie die übrigen Daten gespeichert/synchronisiert.
+   Leerer String = Passwortschutz für diese Aktion deaktiviert. */
+let SECURITY_SETTINGS = { mainPassword: '03082026it!', resetPassword: 'IT-TePm-2017' };
+const SEED_SECURITY_SETTINGS = JSON.parse(JSON.stringify(SECURITY_SETTINGS));
 let storageAvailable = true;
 
 /* ---- Geteilter Cloud-Speicher (optional, Firebase Firestore) ----
@@ -864,6 +869,7 @@ function initCloud(){
       if(Array.isArray(data.licenses)) LICENSES = data.licenses;
       if(Array.isArray(data.procurement)) PROCUREMENT = data.procurement;
       if(data.categoryLists) CATEGORY_LISTS = data.categoryLists;
+      if(data.securitySettings) SECURITY_SETTINGS = data.securitySettings;
       render();
       showToast('Daten wurden aus der Cloud aktualisiert.');
     }, function(err){
@@ -903,6 +909,7 @@ function forceRefresh(){
         if(Array.isArray(data.licenses)) LICENSES = data.licenses;
         if(Array.isArray(data.procurement)) PROCUREMENT = data.procurement;
         if(data.categoryLists) CATEGORY_LISTS = data.categoryLists;
+        if(data.securitySettings) SECURITY_SETTINGS = data.securitySettings;
       }
       render();
       showToast('Aktualisiert.');
@@ -931,7 +938,7 @@ function pushToCloud(dataObj){
 
 let lastLocalSnapshot = null;
 function currentDataObject(){
-  return {users:USERS, devices:DEVICES, licenses:LICENSES, procurement:PROCUREMENT, categoryLists:CATEGORY_LISTS};
+  return {users:USERS, devices:DEVICES, licenses:LICENSES, procurement:PROCUREMENT, categoryLists:CATEGORY_LISTS, securitySettings:SECURITY_SETTINGS};
 }
 function loadPersistedData(){
   try{
@@ -943,6 +950,7 @@ function loadPersistedData(){
     if(Array.isArray(saved.licenses)) LICENSES = saved.licenses;
     if(Array.isArray(saved.procurement)) PROCUREMENT = saved.procurement;
     if(saved.categoryLists) CATEGORY_LISTS = saved.categoryLists;
+    if(saved.securitySettings) SECURITY_SETTINGS = saved.securitySettings;
   }catch(e){
     console.warn('Gespeicherte Daten konnten nicht geladen werden', e);
   }
@@ -963,13 +971,14 @@ function openResetConfirmModal(){
   render();
 }
 function resetConfirmGoToPassword(){
+  if(!SECURITY_SETTINGS.resetPassword){ performReset(); return; }
   state.modal = {type:'reset-confirm', payload:{step:2, error:null}};
   render();
   setTimeout(()=>{ const el=document.getElementById('reset-password-input'); if(el) el.focus(); }, 30);
 }
 function confirmResetWithPassword(){
   const el = document.getElementById('reset-password-input');
-  if(!el || el.value !== 'IT-TePm-2017'){
+  if(!el || el.value !== SECURITY_SETTINGS.resetPassword){
     state.modal = {type:'reset-confirm', payload:{step:2, error:'Falsches Passwort. Der Reset wurde nicht durchgeführt.'}};
     render();
     setTimeout(()=>{ const e2=document.getElementById('reset-password-input'); if(e2) e2.focus(); }, 30);
@@ -983,9 +992,10 @@ function performReset(){
   LICENSES = JSON.parse(JSON.stringify(SEED_LICENSES));
   PROCUREMENT = JSON.parse(JSON.stringify(SEED_PROCUREMENT));
   CATEGORY_LISTS = JSON.parse(JSON.stringify(SEED_CATEGORY_LISTS));
+  SECURITY_SETTINGS = JSON.parse(JSON.stringify(SEED_SECURITY_SETTINGS));
   try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
   closeModal();
-  showToast('Auf Ausgangsdaten zurückgesetzt.');
+  showToast('Auf Ausgangsdaten zurückgesetzt (inkl. Haupt- und Reset-Passwort).');
   goTo('dashboard');
 }
 loadPersistedData();
@@ -1001,7 +1011,8 @@ setTimeout(initCloud, 0);
    WICHTIG: Das ist ein Zugriffsschutz für die Bedienoberfläche, keine Absicherung der
    Datenbank selbst — siehe Hinweis im Chat. */
 const SESSION_KEY = 'tepm-it-portal-unlocked';
-const SIMPLE_LOGIN_PASSWORD = '03082026it!';
+/* Beide Passwörter sind ab jetzt unter Einstellungen änderbar (siehe SECURITY_SETTINGS
+   weiter unten, nahe der Persistenz-Schicht) — hier nur noch die Werkseinstellung. */
 let appUnlocked = false;
 let authMethod = null; // 'simple' | 'firebase', nur gesetzt sobald tatsächlich eingeloggt
 let lockView = 'simple'; // 'simple' | 'firebase' | 'forgot'
@@ -1046,7 +1057,7 @@ function showLock(error, info){
 function switchLockView(view){ lockView=view; showLock(); }
 function submitSimpleLogin(){
   const val = (document.getElementById('lock-password')||{}).value || '';
-  if(val === SIMPLE_LOGIN_PASSWORD){ unlockApp('simple'); }
+  if(val === SECURITY_SETTINGS.mainPassword){ unlockApp('simple'); }
   else { showLock('Falsches Passwort.'); setTimeout(()=>{ const el=document.getElementById('lock-password'); if(el) el.focus(); }, 30); }
 }
 let authListenerAttached = false;
@@ -1095,25 +1106,6 @@ function submitForgotPassword(){
   // Bewusst dieselbe Meldung bei Erfolg und Fehler — verrät nicht, ob die E-Mail existiert.
   firebase.auth().sendPasswordResetEmail(email).then(showSentMessage).catch(showSentMessage);
 }
-/* ---- Microsoft-Login (Firmenkonto) ----
-   Setzt voraus: 1) Azure-AD-App-Registrierung, 2) Microsoft als Sign-in-Provider
-   in der Firebase-Konsole aktiviert (Client-ID/Secret dort eingetragen — NICHT hier).
-   Die Tenant-ID unten sorgt nur dafür, dass die Microsoft-Anmeldeseite direkt den
-   richtigen Firmen-Tenant vorauswählt; die eigentliche Absicherung "nur Firmenkonten"
-   passiert bereits durch die Azure-AD-App-Registrierung selbst (Single-Tenant). */
-function submitMicrosoftLogin(){
-  if(!firebaseAuthAvailableNow()){
-    showLock('Firebase lädt noch — bitte kurz warten und erneut versuchen.'); lockView='simple'; return;
-  }
-  const provider = new firebase.auth.OAuthProvider('microsoft.com');
-  provider.setCustomParameters({ tenant: '3736e203-d029-4257-9834-b3d38c7e5fcb' }); // Tewis Projektmanagement GmbH
-  firebase.auth().signInWithPopup(provider).then(function(){
-    unlockApp('firebase');
-  }).catch(function(err){
-    lockView='simple';
-    showLock('Microsoft-Anmeldung fehlgeschlagen: '+(err.message || err.code || err));
-  });
-}
 function renderLockScreen(error, info){
   const subLabels = {simple:'Bitte Passwort eingeben', firebase:'Mit E-Mail-Konto anmelden', forgot:'Passwort zurücksetzen'};
   return `<div class="lock-screen"><div class="lock-card">
@@ -1131,13 +1123,10 @@ function renderLockScreen(error, info){
       <button class="btn btn-primary btn-block" onclick="submitFirebaseLogin()">Anmelden</button>
       <div class="lock-forgot"><a onclick="switchLockView('forgot')">Passwort vergessen?</a></div>
     ` : `
+      ${!SECURITY_SETTINGS.mainPassword ? `<div class="lock-info">Kein Passwort erforderlich — einfach auf „Entsperren" klicken.</div>` : ''}
       <div class="lock-field"><label>Passwort</label><input id="lock-password" type="password" placeholder="Passwort" autofocus autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="current-password" onkeydown="if(event.key==='Enter') submitSimpleLogin();"></div>
       <button class="btn btn-primary btn-block" onclick="submitSimpleLogin()">Entsperren</button>
-      ${cloudConfigured() ? `
-        <div class="lock-forgot" style="margin-top:16px;margin-bottom:8px;">— oder —</div>
-        <button class="btn btn-block" onclick="submitMicrosoftLogin()">Mit Microsoft-Konto anmelden</button>
-        <div class="lock-forgot"><a onclick="switchLockView('firebase')">Stattdessen mit E-Mail-Konto anmelden</a></div>
-      ` : ''}
+      ${cloudConfigured() ? `<div class="lock-forgot"><a onclick="switchLockView('firebase')">Stattdessen mit E-Mail-Konto anmelden</a></div>` : ''}
     `}
   </div></div>`;
 }
@@ -2705,6 +2694,27 @@ function renderSettings(){
         </div>`;
       }).join('')}
     </div>
+
+    <div class="section-title">Zugangsdaten</div>
+    ${!isAdmin() ? `<div class="notice">${icon('info')}<div>Nur die Rolle „IT-Administrator" darf das Haupt- und das Reset-Passwort einsehen oder ändern.</div></div>` : `
+    <div class="notice">${icon('info')}<div>Diese Passwörter schützen die Bedienoberfläche vor unbeabsichtigtem Zugriff — sie sind kein Ersatz für eine echte Zugriffskontrolle auf die Datenbank selbst. Änderungen wirken sich auf alle Personen aus, die dieses Portal nutzen, und werden (bei aktivem Cloud-Sync) automatisch an alle Geräte übertragen.</div></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(320px,1fr));">
+      <div class="card">
+        <div class="card-header"><h3>Haupt-Passwort (Sperrbildschirm)</h3><span class="badge ${SECURITY_SETTINGS.mainPassword?'badge-green':'badge-gray'}">${SECURITY_SETTINGS.mainPassword?'Aktiv':'Deaktiviert'}</span></div>
+        <div class="card-pad">
+          <div class="cell-muted" style="font-size:12px; margin-bottom:14px;">Wird beim Aufrufen des Portals abgefragt (Reiter „Code eingeben" bzw. Standardansicht des Sperrbildschirms).</div>
+          <button class="btn btn-sm" onclick="openChangePasswordModal('main')">${icon('edit')} Ändern / deaktivieren</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Reset-Passwort (Datenrücksetzung)</h3><span class="badge ${SECURITY_SETTINGS.resetPassword?'badge-green':'badge-gray'}">${SECURITY_SETTINGS.resetPassword?'Aktiv':'Deaktiviert'}</span></div>
+        <div class="card-pad">
+          <div class="cell-muted" style="font-size:12px; margin-bottom:14px;">Wird zusätzlich zur doppelten Bestätigung bei „Auf Ausgangsdaten zurücksetzen" abgefragt.</div>
+          <button class="btn btn-sm" onclick="openChangePasswordModal('reset')">${icon('edit')} Ändern / deaktivieren</button>
+        </div>
+      </div>
+    </div>
+    `}
   `;
 }
 
@@ -2847,6 +2857,7 @@ function renderModal(){
   if(m.type==='label-preview') return labelPreviewModal(m.payload.ids);
   if(m.type==='finder') return finderModal();
   if(m.type==='reset-confirm') return resetConfirmModal(m.payload);
+  if(m.type==='change-password') return changePasswordModal(m.payload);
   return '';
 }
 function modalWrap(inner, large){
@@ -3060,6 +3071,15 @@ function deviceEditModal(id){
   return modalWrap(`
     <div class="modal-header"><h3>${isNew?'Neues Gerät anlegen':'Gerät bearbeiten — '+dv.id}</h3><button class="icon-btn" onclick="closeModal()">${icon('close')}</button></div>
     <div class="modal-body">
+      ${isNew ? `
+      <div style="margin-bottom:16px; padding:12px 16px; background:var(--teal-50); border:1.5px solid var(--teal-600); border-radius:var(--radius); display:flex; align-items:center; justify-content:space-between; gap:12px;">
+        <div>
+          <div class="cell-muted" style="font-size:11px; text-transform:uppercase; letter-spacing:.03em; font-weight:700;">Zugewiesene Inventar-ID</div>
+          <div class="id-mono" style="font-size:18px;">${nextDeviceId()}</div>
+        </div>
+        <div class="cell-muted" style="font-size:11.5px; max-width:220px; text-align:right;">Wird beim Speichern fest vergeben. Kann sich geringfügig ändern, falls zwischenzeitlich ein anderes Gerät angelegt wurde.</div>
+      </div>
+      ` : ''}
       <div class="form-grid">
         <div class="form-field"><label>Gerätetyp</label>
           <select id="de-type">${sortedAlpha(CATEGORY_LISTS.deviceTypes).map(t=>`<option value="${t}" ${dv.type===t?'selected':''}>${t}</option>`).join('')}</select>
@@ -3179,6 +3199,90 @@ function resetConfirmModal(payload){
       <button class="btn btn-danger" onclick="resetConfirmGoToPassword()">Weiter</button>
     </div>
   `);
+}
+
+/* ---- Haupt- und Reset-Passwort unter Einstellungen ändern/deaktivieren ---- */
+function getSecurityKey(which){ return which==='main' ? 'mainPassword' : 'resetPassword'; }
+function openChangePasswordModal(which){
+  state.modal = {type:'change-password', payload:{which, step:1, error:null}};
+  render();
+}
+function changePasswordGoToStep2(which){
+  state.modal = {type:'change-password', payload:{which, step:2, error:null}};
+  render();
+  setTimeout(()=>{ const el=document.getElementById('cp-current'); if(el) el.focus(); }, 30);
+}
+function confirmChangePasswordSave(which){
+  const key = getSecurityKey(which);
+  const current = (document.getElementById('cp-current')||{}).value || '';
+  if(current !== SECURITY_SETTINGS[key]){
+    state.modal = {type:'change-password', payload:{which, step:2, error:'Aktuelles Passwort ist falsch.'}};
+    render(); return;
+  }
+  const next = (document.getElementById('cp-new')||{}).value || '';
+  const confirmVal = (document.getElementById('cp-confirm')||{}).value || '';
+  if(!next){
+    state.modal = {type:'change-password', payload:{which, step:2, error:'Bitte ein neues Passwort eingeben — oder „Passwortschutz deaktivieren" nutzen, um es ganz zu entfernen.'}};
+    render(); return;
+  }
+  if(next !== confirmVal){
+    state.modal = {type:'change-password', payload:{which, step:2, error:'Die beiden neuen Passwörter stimmen nicht überein.'}};
+    render(); return;
+  }
+  SECURITY_SETTINGS[key] = next;
+  closeModal();
+  showToast((which==='main'?'Haupt-Passwort':'Reset-Passwort')+' wurde geändert.');
+  render();
+}
+function confirmDeactivatePassword(which){
+  const key = getSecurityKey(which);
+  const current = (document.getElementById('cp-current')||{}).value || '';
+  if(current !== SECURITY_SETTINGS[key]){
+    state.modal = {type:'change-password', payload:{which, step:2, error:'Aktuelles Passwort ist falsch.'}};
+    render(); return;
+  }
+  if(!confirm('Wirklich den Passwortschutz komplett deaktivieren? Das entfernt eine Sicherheitsstufe für alle, die dieses Portal nutzen.')) return;
+  SECURITY_SETTINGS[key] = '';
+  closeModal();
+  showToast((which==='main'?'Haupt-Passwort':'Reset-Passwort')+' wurde deaktiviert.');
+  render();
+}
+function changePasswordModal(payload){
+  const which = payload.which;
+  const key = getSecurityKey(which);
+  const title = which==='main' ? 'Haupt-Passwort (Sperrbildschirm)' : 'Reset-Passwort (Datenrücksetzung)';
+  if(payload.step === 1){
+    return modalWrap(`
+      <div class="modal-header"><h3>${title} ändern</h3><button class="icon-btn" onclick="closeModal()">${icon('close')}</button></div>
+      <div class="modal-body">
+        <p>${which==='main' ? 'Das Haupt-Passwort schützt den Sperrbildschirm beim Aufrufen des Portals.' : 'Das Reset-Passwort schützt die Funktion „Auf Ausgangsdaten zurücksetzen".'} Eine Änderung wirkt sich auf <strong>alle Personen</strong> aus, die dieses Portal nutzen.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">Abbrechen</button>
+        <button class="btn btn-primary" onclick="changePasswordGoToStep2('${which}')">Weiter</button>
+      </div>
+    `);
+  }
+  return modalWrap(`
+    <div class="modal-header"><h3>${title} ändern</h3><button class="icon-btn" onclick="closeModal()">${icon('close')}</button></div>
+    <div class="modal-body">
+      <div class="form-field">
+        <label>Aktuelles Passwort${SECURITY_SETTINGS[key] ? '' : ' (aktuell deaktiviert — Feld leer lassen)'}</label>
+        <input id="cp-current" type="password" placeholder="Aktuelles Passwort" onkeydown="if(event.key==='Enter') confirmChangePasswordSave('${which}');">
+      </div>
+      ${payload.error ? `<div class="finder-error">${payload.error}</div>` : ''}
+      <div class="cell-muted" style="margin:18px 0 10px; font-weight:700; text-transform:uppercase; font-size:11px; letter-spacing:.03em;">Neues Passwort setzen</div>
+      <div class="form-field"><label>Neues Passwort</label><input id="cp-new" type="password" placeholder="Neues Passwort"></div>
+      <div class="form-field"><label>Neues Passwort bestätigen</label><input id="cp-confirm" type="password" placeholder="Wiederholen" onkeydown="if(event.key==='Enter') confirmChangePasswordSave('${which}');"></div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between;">
+      <button class="btn btn-danger btn-sm" onclick="confirmDeactivatePassword('${which}')">Passwortschutz deaktivieren</button>
+      <div style="display:flex; gap:10px;">
+        <button class="btn" onclick="closeModal()">Abbrechen</button>
+        <button class="btn btn-primary" onclick="confirmChangePasswordSave('${which}')">Speichern</button>
+      </div>
+    </div>
+  `, true);
 }
 
 /* =========================================================
